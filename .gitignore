@@ -1,0 +1,40 @@
+# ---------- Environnement Python ----------
+.venv/
+venv/
+env/
+
+# ---------- Variables d'environnement ----------
+.env
+.env.*
+
+# ---------- Cache Python ----------
+__pycache__/
+*.py[cod]
+*$py.class
+
+# ---------- IDE ----------
+.vscode/
+.idea/
+
+# ---------- Jupyter ----------
+.ipynb_checkpoints/
+
+# ---------- Tests et couverture ----------
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ---------- Fichiers système ----------
+.DS_Store
+Thumbs.db
+
+# ---------- Index FAISS généré ----------
+App/Faiss_index/
+
+# ---------- Données générées ----------
+App/Data/*.csv
+App/Data/*.json
+App/Data/*.parquet
+
+# ---------- Logs ----------
+*.log
