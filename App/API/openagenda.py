@@ -23,6 +23,7 @@ OUTPUT_DIRECTORY = PROJECT_ROOT / "App" / "Data" / "raw"
 API_URL = "https://api.openagenda.com/v2"
 CITY = "Toulouse"
 TOULOUSE_LOCATION_SET_UID = 15245864
+TOULOUSE_AGENDA_UID = 42448083
 # Délais en secondes : connexion au serveur, puis attente de sa réponse.
 TIMEOUT = (10, 30)
 
@@ -100,6 +101,34 @@ def fetch_agendas(session: requests.Session) -> list[dict]:
     return agendas
 
 
+# ---------- Définition brute de l'agenda de référence ----------
+def fetch_reference_agenda(session: requests.Session) -> dict:
+    """Conserver le schéma détaillé pour son interprétation lors du preprocessing."""
+    route = f"/agendas/{TOULOUSE_AGENDA_UID}"
+    try:
+        response = session.get(
+            f"{API_URL}{route}",
+            params={"detailed": 1},
+            timeout=TIMEOUT,
+            allow_redirects=False,
+        )
+    except requests.RequestException:
+        raise RuntimeError(f"Erreur réseau pendant la lecture de {route}.") from None
+
+    if response.status_code != 200:
+        raise RuntimeError(
+            f"OpenAgenda a renvoyé HTTP {response.status_code} pour {route}. "
+            "Vérifiez la clé API et les droits d'accès."
+        )
+    try:
+        payload = response.json()
+    except ValueError:
+        raise RuntimeError(f"Réponse JSON invalide pour {route}.") from None
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"La réponse de {route} doit être un objet JSON.")
+    return payload
+
+
 # ---------- Calcul de la période de collecte ----------
 def get_start_date(collected_at: datetime) -> str:
     """Calculer la borne annuelle commune à tous les appels d'événements."""
@@ -155,6 +184,7 @@ def main() -> int:
         # Réutiliser la connexion ; with ferme la session même en cas d'erreur.
         with requests.Session() as session:
             session.headers.update({"key": api_key, "Accept": "application/json"})
+            reference_agenda = fetch_reference_agenda(session)
             agendas = fetch_agendas(session)
             events = []
             for position, agenda in enumerate(agendas, start=1):
@@ -168,6 +198,7 @@ def main() -> int:
             "location_set_uid": TOULOUSE_LOCATION_SET_UID,
             "city": CITY,
             "timings_gte": start_date,
+            "reference_agenda": reference_agenda,
             "agenda_count": len(agendas),
             "agendas": [
                 {"uid": agenda["uid"], "title": agenda["title"]}
