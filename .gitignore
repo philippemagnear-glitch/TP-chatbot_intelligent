@@ -38,3 +38,7 @@ App/Data/*.parquet
 
 # ---------- Logs ----------
 *.log
+
+# Instructions locales de Codex (non versionnées)
+AGENTS.md
+**/AGENTS.md
