@@ -1,7 +1,8 @@
 """Construire FAISS à partir des textes, métadonnées et vecteurs déjà sauvegardés.
 
-Ce script ne lit ni le JSON OpenAgenda ni .env et n'appelle aucune API.
-Exécuter d'abord build_embeddings.py pour préparer un fichier complet.
+Le dernier JSON prétraité fournit les fiches complètes ajoutées au DocStore.
+Relancer le pipeline complet après une extraction pour utiliser le même dataset.
+Ce script ne lit pas .env et n'appelle aucune API.
 """
 
 import json
@@ -19,6 +20,7 @@ from langchain_core.embeddings import Embeddings
 RAG_DIR = Path(__file__).resolve().parent
 CACHE_PATH = RAG_DIR / "embeddings.jsonl"
 INDEX_DIR = RAG_DIR / "vector_store"
+PROCESSED_DIR = RAG_DIR.parent / "Data" / "processed"
 MODEL = "mistral-embed"
 VECTOR_DIMENSION = 1024
 
@@ -91,6 +93,36 @@ def load_embeddings() -> tuple[list[Document], list[list[float]]]:
     return documents, vectors
 
 
+# ---------- Documents de référence ----------
+def load_event_documents() -> dict[str, Document]:
+    """Charger une fiche complète par UID depuis le dernier JSON prétraité."""
+    files = list(PROCESSED_DIR.glob("openagenda_processed_*.json"))
+    if not files:
+        raise FileNotFoundError(f"Aucun JSON prétraité dans {PROCESSED_DIR}")
+    source = max(files, key=lambda path: (path.stat().st_mtime, path.name))
+    with source.open(encoding="utf-8") as file:
+        data = json.load(file)
+    events = data.get("events") if isinstance(data, dict) else None
+    if not isinstance(events, list) or not events:
+        raise ValueError("La clé events doit contenir une liste non vide.")
+
+    references = {}
+    for event in events:
+        uid = event.get("uid") if isinstance(event, dict) else None
+        if isinstance(uid, bool) or not isinstance(uid, (str, int)) or not str(uid).strip():
+            raise ValueError("Document de référence sans UID valide.")
+        event_id = f"event_{uid}"
+        if event_id in references:
+            raise ValueError(f"Événement dupliqué : {uid}")
+        # Garder la fiche comme dictionnaire préserve listes, nombres et valeurs
+        # nulles, notamment dans timings. Ce texte d'identification n'est pas vectorisé.
+        references[event_id] = Document(
+            page_content=f"Événement {uid}", metadata={"uid": uid, "event": event},
+        )
+    print(f"Fiches complètes chargées : {len(references)} | Source : {source.name}")
+    return references
+
+
 # ---------- Construction et sauvegarde ----------
 # from_embeddings() utilise les vecteurs reçus sans appeler embed_documents().
 # LangChain associe les vecteurs FAISS aux documents et aux métadonnées pour
@@ -102,6 +134,14 @@ def main() -> None:
         raise FileExistsError(f"Index déjà présent : {INDEX_DIR}")
     documents, vectors = load_embeddings()
     ids = [document.metadata["chunk_id"] for document in documents]
+    references = load_event_documents()
+    if set(ids).intersection(references):
+        raise ValueError("Collision entre identifiants de chunks et d'événements.")
+    for document in documents:
+        uid = document.metadata.get("uid")
+        if (isinstance(uid, bool) or not isinstance(uid, (str, int))
+                or f"event_{uid}" not in references):
+            raise ValueError(f"Événement absent pour le chunk {document.metadata['chunk_id']}")
     store = FAISS.from_embeddings(
         text_embeddings=list(zip([document.page_content for document in documents], vectors)),
         embedding=ExistingEmbeddings(),
@@ -109,7 +149,12 @@ def main() -> None:
     )
     if store.index.ntotal != len(documents):
         raise ValueError("Le nombre de vecteurs indexés ne correspond pas aux chunks.")
-    # index.faiss contient l'index vectoriel ; index.pkl conserve les documents
+    # Ajouter directement au DocStore ne crée aucun vecteur : ne pas utiliser
+    # add_documents(), qui déclencherait une vectorisation des fiches complètes.
+    # Un chunk retrouvé donne son uid, puis docstore.search(f"event_{uid}") donne
+    # la fiche complète, même si plusieurs chunks appartiennent au même événement.
+    store.docstore.add(references)
+    # index.faiss contient les vecteurs ; index.pkl conserve les deux types de documents
     # et la correspondance des IDs. Les deux fichiers sont écrits dans un dossier
     # temporaire sur le même système de fichiers, puis déplacés ensemble.
     # Une erreur normale nettoie le temporaire et laisse l'ancien index intact.
@@ -122,7 +167,8 @@ def main() -> None:
         if INDEX_DIR.exists() or INDEX_DIR.is_symlink():
             raise FileExistsError(f"Destination apparue pendant la construction : {INDEX_DIR}")
         ready.rename(INDEX_DIR)
-    print(f"Index terminé : {len(documents)} chunks | {store.index.ntotal} vecteurs | {INDEX_DIR}")
+    print(f"Index terminé : {len(documents)} chunks | {len(references)} événements "
+          f"| {store.index.ntotal} vecteurs | {INDEX_DIR}")
 
 
 if __name__ == "__main__":

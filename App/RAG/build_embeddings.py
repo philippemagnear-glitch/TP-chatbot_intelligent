@@ -93,76 +93,86 @@ def load_events() -> tuple[Path, list[dict]]:
 # Les informations complètes restent dans le JSON prétraité et pourront être
 # retrouvées grâce à uid. Seul page_content est envoyé au modèle d'embedding.
 def build_chunks(event: dict) -> list[Document]:
-    """Créer les chunks thématiques et les liens entre fragments de description."""
-    metadata = {"uid": event["uid"]}
+    """Découper les quatre sections sans dépasser la taille maximale, en-tête compris."""
     sections = {name: list(fields) for name, fields in SECTIONS.items()}
     assigned = {field for fields in sections.values() for field in fields}
     assigned.update({"long_description", "timings"})
-    # Tout champ supplémentaire rejoint les informations pratiques pour éviter
-    # de perdre du contenu si le format des événements évolue.
     sections["Informations pratiques"].extend(
         field for field in event if field not in assigned
     )
-    title = event["title"]
-    chunks = []
-    for name, fields in sections.items():
-        content = "\n".join(
+    section_texts = {
+        name: "\n".join(
             f"{field} : {json.dumps(event[field], ensure_ascii=False)}"
             for field in fields if field in event
         )
-        chunks.append(Document(
-            page_content=f"Événement : {title}\nSection : {name}\n{content}",
-            metadata={**metadata, "section": name},
-        ))
+        for name, fields in sections.items()
+    }
+    # Une description absente ne crée pas de section vide supplémentaire.
+    if event.get("long_description"):
+        section_texts["Description longue"] = event["long_description"]
 
-    # Les 2 048 caractères incluent le titre et le numéro de partie. On réserve
-    # leur place avant de découper la description. Les trois autres sections
-    # restent entières, même si elles dépassent cette taille de référence.
-    # Les caractères ne correspondent pas aux tokens comptés par l'API.
-    header = f"Événement : {title}\nSection : Description longue - partie 99999/99999\n"
-    available = MAX_CHUNK_SIZE - len(header)
-    if available <= CHUNK_OVERLAP:
-        raise ValueError(f"Titre trop long pour le chunking : {event['uid']}")
-    # Une description absente ou nulle ne produit aucun chunk supplémentaire.
-    # Les trois autres sections sont conservées et le JSON source reste inchangé.
-    description = event.get("long_description") or ""
-    # Une description courte reste entière. Sinon, le découpeur LangChain coupe
-    # par caractères avec separators=[""]. Le chevauchement de 150 caractères
-    # répète une partie du texte entre voisins pour préserver le contexte aux coupures.
-    if not description:
-        parts = []
-    elif len(description) <= available:
-        parts = [description]
-    else:
-        splitter = RecursiveCharacterTextSplitter(
-            chunk_size=available, chunk_overlap=CHUNK_OVERLAP, separators=[""]
-        )
-        parts = splitter.split_text(description)
-    if len(parts) > 99999:
-        raise ValueError(f"Description trop longue : {event['uid']}")
-    for number, part in enumerate(parts, start=1):
-        chunks.append(Document(
-            page_content=(f"Événement : {title}\n"
-                          f"Section : Description longue - partie {number}/{len(parts)}\n{part}"),
-            metadata={**metadata, "section": "Description longue",
-                      "part": number, "total_parts": len(parts)},
-        ))
+    chunks = []
+    for name, content in section_texts.items():
+        header = f"Événement : {event['title']}\nSection : {name}\n"
+        if len(header) + len(content) <= MAX_CHUNK_SIZE:
+            parts = [content]
+        else:
+            # Réserver la place du titre, du thème et d'une numérotation large.
+            # Les 2 048 caractères concernent le Document final, pas le seul texte.
+            numbered_header = (
+                f"Événement : {event['title']}\n"
+                f"Section : {name} - partie 99999/99999\n"
+            )
+            available = MAX_CHUNK_SIZE - len(numbered_header)
+            if available <= CHUNK_OVERLAP:
+                raise ValueError(f"En-tête trop long pour le chunking : {event['uid']} / {name}")
+            # Les séparateurs naturels sont essayés avant les caractères.
+            # Garder les séparateurs et espaces évite de supprimer du contenu.
+            # Avec ces séparateurs, le chevauchement peut être inférieur à 150.
+            splitter = RecursiveCharacterTextSplitter(
+                chunk_size=available,
+                chunk_overlap=CHUNK_OVERLAP,
+                separators=["\n\n", "\n", " ", ""],
+                keep_separator=True,
+                strip_whitespace=False,
+            )
+            parts = splitter.split_text(content)
+        if len(parts) > 99999:
+            raise ValueError(f"Section trop longue : {event['uid']} / {name}")
 
-    # chunk_id combine l'UID et le numéro du chunk ; chunk_index indique son ordre.
-    # Les liens précédent/suivant permettront de récupérer le contexte voisin
-    # d'une description. FAISS ne les suit pas automatiquement lors d'une recherche.
-    for number, chunk in enumerate(chunks, start=1):
-        chunk.metadata.update(chunk_id=f"{event['uid']}_{number}", chunk_index=number)
-    descriptions = chunks[len(sections):]
-    for i, chunk in enumerate(descriptions):
-        chunk.metadata["previous_chunk_id"] = (
-            descriptions[i - 1].metadata["chunk_id"] if i else None
-        )
-        chunk.metadata["next_chunk_id"] = (
-            descriptions[i + 1].metadata["chunk_id"] if i + 1 < len(descriptions) else None
-        )
+        section_chunks = []
+        for part_number, part in enumerate(parts, start=1):
+            index = len(chunks) + 1
+            metadata = {
+                "uid": event["uid"], "chunk_id": f"{event['uid']}_{index}",
+                "chunk_index": index, "section": name,
+            }
+            part_header = header
+            if len(parts) > 1:
+                part_header = (
+                    f"Événement : {event['title']}\n"
+                    f"Section : {name} - partie {part_number}/{len(parts)}\n"
+                )
+                metadata.update(part=part_number, total_parts=len(parts))
+            page_content = part_header + part
+            # Contrôle final indépendant du découpeur : aucun dépassement accepté.
+            if len(page_content) > MAX_CHUNK_SIZE:
+                raise ValueError(f"Chunk trop long : {metadata['chunk_id']}")
+            document = Document(page_content=page_content, metadata=metadata)
+            chunks.append(document)
+            section_chunks.append(document)
+
+        # Les liens restent dans la même section, sans relier des thèmes différents.
+        if len(section_chunks) > 1:
+            for index, chunk in enumerate(section_chunks):
+                chunk.metadata["previous_chunk_id"] = (
+                    section_chunks[index - 1].metadata["chunk_id"] if index else None
+                )
+                chunk.metadata["next_chunk_id"] = (
+                    section_chunks[index + 1].metadata["chunk_id"]
+                    if index + 1 < len(section_chunks) else None
+                )
     return chunks
-
 
 # ---------- Validation et reprise ----------
 def validate_vectors(vectors: list, expected_count: int) -> None:
