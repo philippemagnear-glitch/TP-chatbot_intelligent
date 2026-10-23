@@ -49,14 +49,6 @@ SECTIONS = {
         "public", "age_min", "age_max", "accessibility", "conditions", "billetterie",
     ],
 }
-METADATA_FIELDS = [
-    "uid", "title", "slug", "timings", "date_range", "location_name",
-    "address", "postal_code", "city", "district", "metropole",
-    "department", "region", "latitude", "longitude", "event_types",
-    "keywords", "public", "age_min", "age_max", "accessibility",
-    "conditions", "billetterie", "access", "event_links",
-    "online_access_link", "location_website", "status", "origin_agenda",
-]
 
 
 # ---------- Chargement des événements ----------
@@ -97,12 +89,12 @@ def load_events() -> tuple[Path, list[dict]]:
 
 # ---------- Chunking structuré validé dans le notebook ----------
 # Un Document LangChain associe page_content, le texte envoyé à Mistral, et
-# metadata, les informations structurées utilisées pour identifier ou filtrer
-# les résultats. Les métadonnées ne sont pas automatiquement vectorisées ;
-# seuls les champs également présents dans le texte contribuent à l'embedding.
+# metadata, les identifiants nécessaires pour retrouver le chunk et son événement.
+# Les informations complètes restent dans le JSON prétraité et pourront être
+# retrouvées grâce à uid. Seul page_content est envoyé au modèle d'embedding.
 def build_chunks(event: dict) -> list[Document]:
     """Créer les chunks thématiques et les liens entre fragments de description."""
-    metadata = {field: event[field] for field in METADATA_FIELDS if field in event}
+    metadata = {"uid": event["uid"]}
     sections = {name: list(fields) for name, fields in SECTIONS.items()}
     assigned = {field for fields in sections.values() for field in fields}
     assigned.update({"long_description", "timings"})
