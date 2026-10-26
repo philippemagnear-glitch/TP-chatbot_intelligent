@@ -42,3 +42,16 @@ App/Data/*.parquet
 # Instructions locales de Codex (non versionnées)
 AGENTS.md
 **/AGENTS.md
+
+# ---------- Embeddings et index vectoriels ----------
+*.jsonl
+*.faiss
+*.pkl
+
+# ---------- Datasets OpenAgenda ----------
+openagenda_*.json
+# ---------- Données RAG générées ----------
+App/RAG/embeddings.jsonl
+App/RAG/vector_store/
+App/Data/raw/
+App/Data/processed/
