@@ -154,7 +154,7 @@ def main() -> None:
     # Un chunk retrouvé donne son uid, puis docstore.search(f"event_{uid}") donne
     # la fiche complète, même si plusieurs chunks appartiennent au même événement.
     store.docstore.add(references)
-    # index.faiss contient les vecteurs ; index.pkl conserve les deux types de documents
+    # Vector_Store.faiss contient les vecteurs ; DocStore_LangChain.pkl conserve les documents
     # et la correspondance des IDs. Les deux fichiers sont écrits dans un dossier
     # temporaire sur le même système de fichiers, puis déplacés ensemble.
     # Une erreur normale nettoie le temporaire et laisse l'ancien index intact.
@@ -162,7 +162,11 @@ def main() -> None:
     with tempfile.TemporaryDirectory(prefix=".faiss_", dir=RAG_DIR) as temporary:
         ready = Path(temporary) / "vector_store"
         store.save_local(str(ready))
-        if not all((ready / name).is_file() for name in ("index.faiss", "index.pkl")):
+        # LangChain utilise un même préfixe pour ses deux fichiers. Les renommer
+        # avant publication permet de distinguer clairement leurs rôles.
+        (ready / "index.faiss").rename(ready / "Vector_Store.faiss")
+        (ready / "index.pkl").rename(ready / "DocStore_LangChain.pkl")
+        if not all((ready / name).is_file() for name in ("Vector_Store.faiss", "DocStore_LangChain.pkl")):
             raise OSError("Sauvegarde FAISS incomplète.")
         if INDEX_DIR.exists() or INDEX_DIR.is_symlink():
             raise FileExistsError(f"Destination apparue pendant la construction : {INDEX_DIR}")

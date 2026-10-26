@@ -63,14 +63,16 @@ def evaluate(version: str) -> Path:
     with file:
         date = datetime.now(ZoneInfo("Europe/Paris")).isoformat(timespec="seconds")
         file.write(f"VERSION : {version}\nDATE : {date}\nMODÈLE : {chatbot.CHAT_MODEL}\n"
-                   f"SEARCH_K : {chatbot.SEARCH_K}\nMAX_EVENTS : {chatbot.MAX_EVENTS}\n\n")
+                   f"SEARCH_K : {chatbot.SEARCH_K}\nMAX_EVENTS : {chatbot.MAX_EVENTS}\n"
+                   f"USE_MARKDOWN_CONTEXT : {chatbot.USE_MARKDOWN_CONTEXT}\n\n")
         try:
             store, llm, prompt = chatbot.load_resources()
         except (httpx.HTTPError, OSError, ValueError, RuntimeError, EOFError) as error:
             file.write(f"ERREUR D'INITIALISATION : {type(error).__name__}\n")
             file.flush()
             raise
-        # Le prompt est celui réellement chargé, pas une nouvelle lecture du fichier.
+        # load_resources() lit prompt.md : conserver ce Markdown tel qu'il est
+        # transmis au message système, sans relire ni convertir le fichier.
         file.write(f"PROMPT UTILISÉ :\n{prompt}\n\n---\n\n")
         file.flush()
         for index, question in enumerate(questions, start=1):

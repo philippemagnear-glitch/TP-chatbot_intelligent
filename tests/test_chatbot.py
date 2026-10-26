@@ -81,8 +81,9 @@ def test_generate_answer_without_results_does_not_call_llm():
     llm.invoke.assert_not_called()
 
 
-def test_generate_answer_sends_literal_prompt_and_full_context():
+def test_generate_answer_sends_literal_prompt_and_full_context(monkeypatch):
     """Séparer instructions et données, en conservant les accolades du prompt libre."""
+    monkeypatch.setattr(chatbot, "USE_MARKDOWN_CONTEXT", False)
     store, llm = Mock(), Mock()
     reference = make_reference(12345)
     store.similarity_search.return_value = [Document(page_content="Jazz", metadata={"uid": 12345})]
@@ -100,13 +101,47 @@ def test_generate_answer_sends_literal_prompt_and_full_context():
     assert json.loads(payload) == [reference.metadata]
 
 
+def test_markdown_preserves_business_data_without_mutating_source():
+    """Conserver descriptions, horaires, zéro, false et URL ; retirer les embeds."""
+    reference = make_reference(12345)
+    reference.metadata["event"].update({
+        "description": "Concert\npour tous", "age_min": 0,
+        "accessibility": {"mi": False},
+        "event_links": [{"link": "https://example.org/a/b", "data": {
+            "title": "Programme", "description": "Tout le programme",
+            "html": "<iframe>TECHNIQUE</iframe>", "script": "SCRIPT_TECHNIQUE",
+        }}],
+    })
+    before = chatbot.build_context([reference])
+    context = chatbot.build_markdown_context([reference])
+    for text in ("Festival 12345", "UID 12345", "Concert\npour tous", "Âge minimum\n", "2026-11-10T20:00:00+01:00", "false", "Non renseigné", "https://example.org/a/b", "Programme", "Tout le programme"):
+        assert text in context
+    assert "\n0" in context
+    assert "TECHNIQUE" not in context
+    assert chatbot.build_context([reference]) == before
+
+
+def test_generate_answer_uses_optional_markdown_context(monkeypatch):
+    """Changer uniquement le contexte utilisateur, sans toucher au prompt système."""
+    monkeypatch.setattr(chatbot, "USE_MARKDOWN_CONTEXT", True)
+    reference = make_reference(12345)
+    monkeypatch.setattr(chatbot, "search_events", Mock(return_value=[reference]))
+    llm = Mock()
+    llm.invoke.return_value = AIMessage(content="Réponse")
+    chatbot.generate_answer("Du jazz ?", Mock(), llm, "Consignes inchangées")
+    messages = llm.invoke.call_args.args[0]
+    assert messages[0].content == "Consignes inchangées"
+    assert messages[1].content.endswith(chatbot.build_markdown_context([reference]))
+    assert "Fiches d'événements (Markdown)" in messages[1].content
+
+
 def test_load_resources_reads_prompt_file_and_uses_local_index(monkeypatch, tmp_path):
     """Lire le prompt depuis son fichier et charger notre paire locale sans clients réels."""
     prompt_path = tmp_path / "prompt.txt"
     prompt_path.write_text('Consignes libres : {"test": true}', encoding="utf-8")
     index_dir = tmp_path / "vector_store"
     index_dir.mkdir()
-    for name in ("index.faiss", "index.pkl"):
+    for name in ("Vector_Store.faiss", "DocStore_LangChain.pkl"):
         (index_dir / name).write_bytes(b"fichier fictif, jamais deserialise")
     monkeypatch.setattr(chatbot, "PROMPT_PATH", prompt_path)
     monkeypatch.setattr(chatbot, "INDEX_DIR", index_dir)
@@ -116,14 +151,19 @@ def test_load_resources_reads_prompt_file_and_uses_local_index(monkeypatch, tmp_
     constructor = Mock(return_value=embeddings)
     monkeypatch.setattr(chatbot, "MistralAIEmbeddings", constructor)
     monkeypatch.setattr(chatbot, "ChatMistralAI", Mock(return_value=llm))
+    index_reader = Mock(return_value=store.index)
+    docstore, mapping = Mock(), {0: "12345_1"}
+    monkeypatch.setattr(chatbot.faiss, "read_index", index_reader)
+    monkeypatch.setattr(chatbot.pickle, "load", Mock(return_value=(docstore, mapping)))
     loader = Mock(return_value=store)
-    monkeypatch.setattr(chatbot.FAISS, "load_local", loader)
+    monkeypatch.setattr(chatbot, "FAISS", loader)
 
     loaded_store, loaded_llm, prompt = chatbot.load_resources()
 
     assert loaded_store is store and loaded_llm is llm
     assert prompt == prompt_path.read_text(encoding="utf-8")
-    loader.assert_called_once_with(str(index_dir), embeddings, allow_dangerous_deserialization=True)
+    index_reader.assert_called_once_with(str(index_dir / "Vector_Store.faiss"))
+    loader.assert_called_once_with(embeddings, store.index, docstore, mapping)
     constructor.assert_called_once_with(model="mistral-embed", api_key="cle-fictive", max_retries=0)
 
 

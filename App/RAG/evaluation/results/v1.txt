@@ -1,0 +1,403 @@
+VERSION : v1
+DATE : 2026-10-23T15:20:04+02:00
+MODÈLE : ministral-8b-2512
+SEARCH_K : 20
+MAX_EVENTS : 5
+
+PROMPT UTILISÉ :
+Tu es un assistant spécialisé dans les événements culturels et de loisirs à Toulouse.
+
+Réponds en français aux questions de l'utilisateur en utilisant les fiches d'événements OpenAgenda fournies.
+
+Propose les événements les plus pertinents et donne les informations utiles pour répondre à la question.
+
+Si tu ne connais pas une information, ne l'invente pas.
+
+---
+
+QUESTION Q01 — Question factuelle
+
+Question :
+Où se déroule le ciné-concert C.A.V.E.R.N.E.S. du 28 octobre 2026 ?
+
+Réponse attendue :
+À l'auditorium du Muséum de Toulouse, 35 allées Jules Guesde, à Toulouse.
+
+UID attendus : 359882
+
+STATUT : RÉPONSE OBTENUE
+Réponse générée :
+Le **ciné-concert C.A.V.E.R.N.E.S.** prévu le **mercredi 28 octobre 2026** se déroulera à l'**Auditorium du Muséum de Toulouse**.
+
+### Informations pratiques :
+- **Adresse** : 35 allées Jules Guesde, 31000 Toulouse
+- **Horaires** : De 15h00 à 15h40
+- **Public** : Tout public à partir de 10 ans
+- **Tarif** : Inclus dans le billet d'entrée au Muséum
+- **Accès** :
+  - Métro : Ligne B (stations Carmes ou Palais de Justice)
+  - Tramway : Lignes T1 et T2 (arrêt Palais de Justice)
+  - Bus : Linéo 9 (arrêt Grand Rond)
+
+Pour plus de détails, vous pouvez consulter le site du Muséum de Toulouse : [https://museum.toulouse-metropole.fr/](https://museum.toulouse-metropole.fr/).
+
+---
+
+QUESTION Q02 — Question factuelle
+
+Question :
+Quel est le nom de l'exposition consacrée aux minéraux présentée au Muséum de Toulouse du 2 octobre 2026 au 4 juillet 2027 ?
+
+Réponse attendue :
+L'exposition s'intitule « Minéraux, bien plus que des cailloux ».
+
+UID attendus : 33128226
+
+STATUT : RÉPONSE OBTENUE
+Réponse générée :
+L'exposition consacrée aux minéraux présentée au **Muséum de Toulouse** du **2 octobre 2026 au 4 juillet 2027** s'intitule :
+
+**"Minéraux, bien plus que des cailloux"**
+
+### Informations complémentaires :
+- **Lieu** : Muséum de Toulouse, 35 allées Jules Guesde, 31000 Toulouse.
+- **Horaires** : Du mardi au dimanche de 10h à 18h.
+- **Accès** : Métro ligne B (stations Carmes ou Palais de Justice), Tramway (lignes T1 et T2, arrêt Palais de Justice), Bus (Linéo 9, arrêt Grand Rond).
+- **Tarifs** : Plein tarif 12€, réduit 8€.
+- **Durée de visite** : Environ 1 heure.
+
+Pour plus de détails, vous pouvez consulter les [informations pratiques](https://museum.toulouse-metropole.fr/horaires-tarifs-acces/).
+
+---
+
+QUESTION Q03 — Métadonnées
+
+Question :
+Quels sont les horaires exacts des deux représentations du spectacle « Même pas peur » le 29 octobre 2026 ?
+
+Réponse attendue :
+La première séance a lieu de 11h à 11h45 et la seconde de 15h à 16h15.
+
+UID attendus : 47196421
+
+STATUT : RÉPONSE OBTENUE
+Réponse générée :
+D'après les données disponibles, le spectacle **"Même pas peur"** (ou *"Le conteur des cimes : spectacle Même pas peur"*) aura lieu **le jeudi 29 octobre 2026** au **Muséum de Toulouse** avec **deux représentations** aux horaires suivants :
+
+- **11h00** (pour un **jeune public**, dès 6 ans)
+- **15h00** (pour **tout public**, dès 6 ans)
+
+Les créneaux s'achèvent respectivement à **11h45** et **16h15**.
+
+### Informations complémentaires :
+- **Lieu** : Muséum de Toulouse, 35 allées Jules Guesde, 31000 Toulouse.
+- **Accès** :
+  - Métro : ligne B (stations Carmes ou Palais de Justice).
+  - Tram : lignes T1 et T2 (arrêt Palais de Justice).
+  - Bus : Linéo 9 (arrêt Grand Rond).
+- **Tarif** : Inclus dans le billet d'entrée au Muséum.
+- **Accessibilité** : Adapté aux publics non-voyants, malvoyants et en situation de handicap cognitif/psychique.
+
+Si vous souhaitez des précisions sur les modalités d'achat des billets, je vous invite à consulter directement le site du [Muséum de Toulouse](https://museum.toulouse-metropole.fr/).
+
+---
+
+QUESTION Q04 — Métadonnées
+
+Question :
+Quelles sont les conditions d'entrée à la soirée d'enquête « Le mystérieux cabinet du Professeur Astrophylitus » du 7 octobre 2026 ?
+
+Réponse attendue :
+L'entrée est gratuite, mais une inscription est obligatoire.
+
+UID attendus : 66026610
+
+STATUT : RÉPONSE OBTENUE
+Réponse générée :
+D'après les informations disponibles dans les fiches d'événements, voici les **conditions d'entrée** pour la soirée d'enquête **"Le mystérieux cabinet du Professeur Astrophylitus"** prévue le **mercredi 7 octobre 2026** au Muséum de Toulouse :
+
+- **Gratuit** : L'événement est entièrement gratuit.
+- **Inscription obligatoire** : Il faut s'inscrire pour participer, dans la limite des places disponibles.
+- **Public adulte** : L'événement est destiné aux personnes **âgées de 18 ans et plus**.
+- **Accessibilité** : L'événement est accessible aux personnes sourdes et malentendantes, avec une **traduction en Langue des Signes Française (LSF)**.
+
+Pour plus de détails et pour vous inscrire, vous pouvez consulter le site officiel du **Festival Toulouse Polars du Sud** :
+👉 [toulouse-polars-du-sud.com](http://toulouse-polars-du-sud.com)
+
+N'hésitez pas à vérifier régulièrement leur site pour les modalités précises d'inscription.
+
+---
+
+QUESTION Q05 — Recherche sémantique
+
+Question :
+Je cherche un spectacle qui utilise de vieux films pour raconter la découverte des grottes préhistoriques d'Ariège, accompagnés de musique jouée en direct. Quel est cet événement ?
+
+Réponse attendue :
+Il s'agit du ciné-concert « C.A.V.E.R.N.E.S. », qui associe des films d'archives des grottes ariégeoises à une interprétation musicale.
+
+UID attendus : 359882
+
+STATUT : RÉPONSE OBTENUE
+Réponse générée :
+L'événement que vous cherchez s'intitule **"Ciné concert C.A.V.E.R.N.E.S."** au **Muséum de Toulouse**.
+
+### Détails de l'événement :
+- **Description** : Ce spectacle unique combine des **films anciens** (tournés il y a un siècle) montrant la découverte des grottes préhistoriques d'Ariège (comme Niaux, Lombrives, Bédeilhac et le Mas d'Azil) avec une **musique jouée en direct**. Les musiques sont interprétées par Isabelle Bagur, Olivier Capelle et Jean-Paul Raffit, avec des œuvres de Gabriel Fauré et des improvisations.
+- **Thème** : L'événement plonge dans l'histoire des premiers préhistoriens et découvreurs de ces grottes, en mettant en lumière les peintures pariétales et les figures historiques comme Émile Cartailhac ou Joseph Mandement.
+- **Date et horaire** : **Mercredi 28 octobre 2026, de 15h à 15h40**.
+- **Lieu** : **Auditorium du Muséum de Toulouse** (35 allées Jules Guesde, 31000 Toulouse).
+- **Public** : Tout public à partir de **10 ans**.
+- **Tarif** : **Inclus dans le billet d'entrée** au Muséum.
+- **Accessibilité** : L'événement n'est pas adapté aux personnes en situation de handicap (visuel, moteur, intellectuel, etc.).
+
+### Comment y accéder ?
+- **Transports** :
+  - Métro : Ligne B, stations *Carmes* ou *Palais de Justice*.
+  - Tramway : Lignes T1 et T2, arrêt *Palais de Justice*.
+  - Bus : Linéo 9, arrêt *Grand Rond*.
+
+Si vous souhaitez plus d'informations ou réserver, vous pouvez consulter le site du **Muséum de Toulouse** : [https://museum.toulouse-metropole.fr/](https://museum.toulouse-metropole.fr/).
+
+C'est l'événement idéal pour allier **cinéma, musique live et découverte de la préhistoire** !
+
+---
+
+QUESTION Q06 — Recherche sémantique
+
+Question :
+Quelle exposition explique comment les minéraux ont été utilisés depuis la Préhistoire et aborde aussi les conséquences environnementales de leur exploitation actuelle ?
+
+Réponse attendue :
+« Minéraux, bien plus que des cailloux », au Muséum de Toulouse.
+
+UID attendus : 33128226
+
+STATUT : RÉPONSE OBTENUE
+Réponse générée :
+L'exposition qui répond parfaitement à votre demande est **"Minéraux, bien plus que des cailloux"** au **Muséum de Toulouse**.
+
+### Pourquoi cette exposition ?
+Cette exposition aborde plusieurs aspects que vous cherchez :
+- **Utilisation des minéraux depuis la Préhistoire** : Elle retrace l’évolution de l’exploitation des minéraux depuis le Paléolithique jusqu’à l’époque contemporaine, en passant par les premiers outils en silex.
+- **Conséquences environnementales de leur exploitation actuelle** : Elle interroge les impacts de la surexploitation des ressources minérales sur les écosystèmes et les populations, en montrant leur omniprésence dans notre quotidien (téléphones, ordinateurs, voitures, batteries, bijoux, etc.).
+
+### Informations pratiques :
+- **Lieu** : Muséum de Toulouse, 35 allées Jules Guesde, 31000 Toulouse.
+- **Dates** : Du **2 octobre 2026 au 4 juillet 2027**.
+- **Horaires** : Du mardi au dimanche de **10h à 18h** (fermé les lundis et jours fériés).
+- **Accès** :
+  - Métro : Ligne B, stations Carmes ou Palais de Justice.
+  - Tramway : Lignes T1 et T2, arrêt Palais de Justice.
+  - Bus : Linéo 9, arrêt Grand Rond.
+- **Tarifs** :
+  - Plein tarif : 12 €
+  - Tarif réduit : 8 €
+  - Accès PMR disponible.
+- **Durée de visite** : Environ 1 heure.
+
+Pour plus d’informations sur les tarifs, les horaires détaillés et les éventuelles réductions, consultez le site du Muséum : [Muséum de Toulouse](https://museum.toulouse-metropole.fr/horaires-tarifs-acces/).
+
+Vous pouvez aussi consulter l'agenda des visites guidées associées à cette exposition : [Visites guidées](https://museum.toulouse-metropole.fr/visite-guidee-de-lexposition-mineraux-bien-plus-que-des-cailloux/).
+
+---
+
+QUESTION Q07 — Recommandation multicritère
+
+Question :
+Je souhaite découvrir les minéraux à Toulouse entre le 27 et le 29 octobre 2026. Peux-tu me proposer des événements qui correspondent à ce thème ?
+
+Réponse attendue :
+L'exposition « Minéraux, bien plus que des cailloux » constitue une première recommandation. La visite guidée de cette exposition est également pertinente, sous réserve de vérifier ses créneaux dans cette période.
+
+UID attendus : 33128226, 65028914
+
+STATUT : RÉPONSE OBTENUE
+Réponse générée :
+Pour découvrir les minéraux à Toulouse entre le **27 et le 29 octobre 2026**, voici les événements pertinents que je peux vous proposer :
+
+---
+
+### 1. **Exposition temporaire : "Minéraux, bien plus que des cailloux"**
+   - **Lieu** : Muséum de Toulouse (35 allées Jules Guesde, Toulouse)
+   - **Dates** : Du **2 octobre 2026 au 4 juillet 2027** (donc disponible pour vos dates).
+   - **Horaires** :
+     - **27 octobre** : 10h00 - 18h00
+     - **28 octobre** : 10h00 - 18h00
+     - **29 octobre** : 10h00 - 18h00
+   - **Description** :
+     Cette exposition vous plonge dans l'univers fascinant des minéraux, depuis leur formation jusqu'à leurs usages contemporains. Vous y découvrirez leur rôle dans l'histoire des sociétés humaines, leur importance dans les technologies modernes, et bien plus encore.
+   - **Tarifs** :
+     Plein tarif : 12€, réduit : 8€ (gratuit pour certaines catégories, vérifiez les conditions sur le site).
+   - **Accès** :
+     Métro : Ligne B (stations Carmes ou Palais de Justice)
+     Tramway : Lignes T1 et T2 (arrêt Palais de Justice)
+     Bus : Linéo 9 (arrêt Grand Rond)
+   - **Site officiel** : [Muséum de Toulouse](https://museum.toulouse-metropole.fr/)
+
+---
+
+### 2. **Visite guidée de l'exposition "Minéraux, bien plus que des cailloux"**
+   - **Lieu** : Muséum de Toulouse
+   - **Dates et horaires disponibles** :
+     - **27 octobre** : 11h10 - 11h55 et 16h10 - 16h55
+     - **28 octobre** : 11h10 - 11h55 et 16h10 - 16h55
+     - **29 octobre** : 11h10 - 11h55 et 16h10 - 16h55
+   - **Description** :
+     Une visite guidée pour explorer les minéraux à travers cinq étapes clés : formation, identification, propriétés, usages et enjeux contemporains.
+   - **Conditions** :
+     Inclus dans le billet d'entrée, tout public à partir de 7 ans.
+     Inscription sur place le jour même, rendez-vous 5 minutes avant le début.
+
+---
+
+### 3. **Atelier "Enquête au Labo : minéral Z"**
+   - **Lieu** : Muséum de Toulouse
+   - **Dates et horaires disponibles** :
+     - **27 octobre** : 14h30 - 15h20, 15h30 - 16h20, 16h30 - 17h20
+     - **28 octobre** : 14h30 - 15h20, 15h30 - 16h20, 16h30 - 17h20
+     - **29 octobre** : 14h30 - 15h20, 15h30 - 16h20, 16h30 - 17h20
+   - **Description** :
+     Venez résoudre une enquête en identifiant un mystérieux cristal grâce à des techniques de minéralogie ludiques (magnétisme, dureté, fluorescence, etc.).
+   - **Conditions** :
+     Inclus dans le billet d'entrée, tout public dès 7 ans.
+     Inscription sur place le jour même, rendez-vous 5 minutes avant.
+
+---
+
+### 4. **Rencontre "Passion géologie"**
+   - **Lieu** : Muséum de Toulouse
+   - **Date et horaires** :
+     - **23 octobre** (hors de votre période, mais si vous souhaitez une idée pour d'autres dates) : 10h00 - 12h00 et 14h00 - 16h30
+   - **Description** :
+     Rencontre avec le Club Le Béryl de Tournefeuille pour découvrir leurs collections et leurs connaissances sur les minéraux de la région.
+   - **Conditions** :
+     Inclus dans le billet d'entrée, tout public dès 10 ans, accessible aux personnes en situation de handicap.
+
+---
+
+### Conseils pratiques :
+- **Accès PMR** : Le Muséum de Toulouse est accessible aux personnes à mobilité réduite.
+- **Billets** : Il est conseillé de vérifier les tarifs et les éventuelles réductions sur le site du Muséum.
+- **Réservations** : Pour les visites guidées et ateliers, l'inscription se fait sur place le jour même.
+
+Ces événements devraient vous permettre de découvrir le monde des minéraux de manière à la fois informative et ludique !
+
+---
+
+QUESTION Q08 — Recommandation multicritère
+
+Question :
+Je cherche des activités culturelles autour de l'imaginaire, des contes ou de la découverte pour de jeunes enfants à Toulouse en octobre 2026. Que me recommandes-tu ?
+
+Réponse attendue :
+« Petits mondes lumineux » le 27 octobre, pour les enfants de 6 mois à 3 ans, et « Le conteur des cimes : Même pas peur » le 29 octobre, à partir de 6 ans. Les âges recommandés sont différents et doivent être précisés.
+
+UID attendus : 73281314, 47196421
+
+STATUT : RÉPONSE OBTENUE
+Réponse générée :
+Voici les activités culturelles autour de l'**imaginaire, des contes et de la découverte** pour les jeunes enfants à Toulouse en **octobre 2026**, en fonction des fiches disponibles :
+
+---
+
+### **1. Pour les 0-3 ans**
+#### **"Le temps des tout-petits"**
+- **Quand ?** Vendredi 2 octobre à 10h (et plusieurs autres dates en novembre/décembre).
+- **Où ?** Médiathèque Saint-Exupéry (37 rue du Lot, Toulouse).
+- **Description** : Un petit rituel pour écouter des histoires, danser ou s'émerveiller. Idéal pour les tout-petits.
+- **Durée** : 30 minutes.
+- **Inscription** : Par téléphone au **05 36 25 20 01/02** ou par mail à [saintexupery@mairie-toulouse.fr](mailto:saintexupery@mairie-toulouse.fr).
+
+---
+
+#### **"Lectures coups de cœur pour les bébés explorateurs"**
+- **Quand ?** Samedi 3 octobre à 10h30 (dans le cadre des **Journées Biblis en Folie**).
+- **Où ?** Médiathèque jeunesse du Muséum (1er étage, 35 allées Jules Guesde).
+- **Description** : Découverte d’albums et comptines préférés des médiathécaires, dans un cadre convivial.
+- **Public** : 0-3 ans.
+- **Gratuit** sur inscription (inscriptions ouvertes 30 jours avant).
+- **Accès** : Métro ligne B (station Carmes/Palais de Justice) ou bus Linéo 9.
+- **Lien** : [Site du Muséum](https://museum.toulouse-metropole.fr/bibliotheque-2/mediatheque-jeunesse-pourquoi-pas/).
+
+---
+
+### **2. Pour les 4-8 ans (et plus)**
+#### **"Les Explorateurs de l'imaginaire"**
+- **Quand ?** Mercredi 21 octobre à 10h30.
+- **Où ?** Bibliothèque d’Étude et du Patrimoine (1 rue du Périgord).
+- **Description** : Atelier créatif pour inventer une **carte d’un monde fantastique** (montagnes, îles flottantes, créatures magiques) avec des techniques de **pop-up** (relief par pliages/découpes).
+- **Public** : À partir de 8 ans (mais certains enfants de 6-7 ans pourraient s’y intéresser avec accompagnement).
+- **Inscription** : [mediation.bep@mairie-toulouse.fr](mailto:mediation.bep@mairie-toulouse.fr).
+- **Accès** : Métro ligne A/B (station Capitole) ou Vélô’Toulouse (station 14).
+
+---
+
+### **Autres idées (hors octobre 2026 mais à noter pour plus tard)**
+- **Stages d’arts du cirque** (6-12 ans) : Du 27 au 31 octobre 2025 (si vous cherchez une activité manuelle et ludique, mais hors date demandée).
+
+---
+
+### **Conseils pour choisir** :
+- **Pour les 0-3 ans** : Privilégiez **"Le temps des tout-petits"** (Médiathèque Saint-Exupéry) ou les **lectures du Muséum** (3 octobre).
+- **Pour les 4-8 ans** : L’atelier **"Les Explorateurs de l’imaginaire"** (21 octobre) est parfait pour stimuler la créativité.
+- **Gratuit** : Tous les événements cités sont gratuits (sauf inscriptions obligatoires).
+
+---
+### **À vérifier** :
+- Les inscriptions pour les ateliers du Muséum s’ouvrent **30 jours avant** (soit début septembre pour octobre). Consultez régulièrement [ce lien](https://museum.toulouse-metropole.fr/bibliotheque-2/mediatheque-jeunesse-pourquoi-pas/) pour les dates précises.
+
+Si vous souhaitez des alternatives plus "contes traditionnels" ou des spectacles, je peux vous orienter vers des compagnies locales comme **Les Petits Débrouillards** ou **La Cordée**, mais ces dernières ne sont pas listées dans les données fournies. 😊
+
+---
+
+QUESTION Q09 — Question piège
+
+Question :
+Quel est le prix exact en euros du billet d'entrée au spectacle « Petits mondes lumineux » du 27 octobre 2026 ?
+
+Réponse attendue :
+Le spectacle est inclus dans le billet d'entrée du Muséum, avec inscription sur place le jour même. Le tarif exact du billet d'entrée n'est pas indiqué dans la fiche de cet événement.
+
+UID attendus : 73281314
+
+STATUT : RÉPONSE OBTENUE
+Réponse générée :
+D'après les fiches d'événements disponibles, le spectacle **"Petits mondes lumineux"** prévu le **mardi 27 octobre 2026** au **Muséum de Toulouse** a les conditions d'accès suivantes :
+
+- **Tarif** : **Inclus dans le billet d'entrée au Muséum** (pas de tarif supplémentaire pour le spectacle).
+- **Inscription** : **Uniquement le jour même sur place**.
+
+Il n'est donc pas possible d'acheter un billet spécifique pour le spectacle seul, mais il faut acheter un billet d'entrée au Muséum pour y accéder. Les tarifs du Muséum ne sont pas précisés dans les données fournies, mais vous pouvez consulter leur site officiel ([muséum.toulouse-metropole.fr](https://museum.toulouse-metropole.fr/)) pour connaître les prix actuels.
+
+Pour plus d'informations, voici le lien vers le site du Muséum : [https://museum.toulouse-metropole.fr/](https://museum.toulouse-metropole.fr/).
+
+---
+
+QUESTION Q10 — Question piège
+
+Question :
+Le ciné-concert C.A.V.E.R.N.E.S. du 28 octobre 2026 est-il officiellement accessible aux personnes en fauteuil roulant ?
+
+Réponse attendue :
+La fiche ne permet pas de confirmer cette accessibilité. Aucune indication positive n'est fournie pour l'accessibilité motrice de cet événement. Il faut vérifier auprès de l'organisateur.
+
+UID attendus : 359882
+
+STATUT : RÉPONSE OBTENUE
+Réponse générée :
+D'après les informations disponibles dans les fiches d'événements OpenAgenda, **le ciné-concert *C.A.V.E.R.N.E.S.* prévu le 28 octobre 2026 au Muséum de Toulouse n'est pas officiellement indiqué comme accessible aux personnes en fauteuil roulant**.
+
+La fiche de cet événement précise dans la section **"accessibility"** que :
+- `pi` (Personnes à Mobilité Réduite) = `false`.
+
+Cela signifie que l'événement **n'est pas adapté pour les personnes en fauteuil roulant** selon les données actuelles.
+
+### Conseils pratiques :
+- **Vérifiez les éventuelles mises à jour** sur le site du Muséum de Toulouse ([muséum.toulouse-metropole.fr](https://museum.toulouse-metropole.fr/)) avant de vous y rendre, car des aménagements peuvent être annoncés plus tard.
+- **Contactez le Muséum** directement pour confirmer les conditions d’accès spécifiques à cet événement.
+
+Si vous avez besoin d’autres informations sur des événements accessibles à Toulouse, je peux vous aider à en trouver d’autres !
+
+---
+

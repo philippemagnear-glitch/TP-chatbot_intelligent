@@ -157,15 +157,18 @@ def test_main_preserves_event_references_after_save_and_reload(sample_data, samp
     indexing.main()
 
     assert {path.name for path in indexing.INDEX_DIR.iterdir()} == {
-        "index.faiss", "index.pkl",
+        "Vector_Store.faiss", "DocStore_LangChain.pkl",
     }
     # Le JSON n'est plus nécessaire une fois le DocStore sauvegardé.
     (indexing.PROCESSED_DIR / "openagenda_processed_test.json").unlink()
     # Autorisation pickle limitée aux fichiers créés par ce test dans tmp_path.
-    reloaded = indexing.FAISS.load_local(
-        str(indexing.INDEX_DIR), indexing.ExistingEmbeddings(),
-        allow_dangerous_deserialization=True,
-    )
+    import faiss
+    import pickle
+
+    index = faiss.read_index(str(indexing.INDEX_DIR / "Vector_Store.faiss"))
+    with (indexing.INDEX_DIR / "DocStore_LangChain.pkl").open("rb") as file:
+        docstore, index_to_docstore_id = pickle.load(file)
+    reloaded = indexing.FAISS(indexing.ExistingEmbeddings(), index, docstore, index_to_docstore_id)
     results = reloaded.similarity_search_by_vector([0.99, 0.01] + [0.0] * 1022, k=2)
 
     assert reloaded.index.ntotal == len(documents)

@@ -49,13 +49,16 @@ def test_load_questions_rejects_incomplete_or_inconsistent_game(monkeypatch, tmp
         evaluation.load_questions()
 
 
-def test_evaluate_records_answers_prompt_parameters_and_progress(capsys):
+@pytest.mark.parametrize("markdown", [False, True])
+def test_evaluate_records_answers_prompt_parameters_and_progress(capsys, monkeypatch, markdown):
     """Vérifier la lisibilité du rapport et l'appel unique au chargement des ressources."""
+    monkeypatch.setattr(evaluation.chatbot, "USE_MARKDOWN_CONTEXT", markdown)
     questions = evaluation.load_questions()
     output = evaluation.evaluate("v1")
     content = output.read_text(encoding="utf-8")
 
     assert output.name == "v1.txt"
+    assert f"USE_MARKDOWN_CONTEXT : {markdown}" in content
     for text in ("VERSION : v1", "DATE :", evaluation.chatbot.CHAT_MODEL, "SEARCH_K : 20", "MAX_EVENTS : 5", "Prompt fictif {modifiable}"):
         assert text in content
     assert content.count("STATUT : RÉPONSE OBTENUE") == 10
