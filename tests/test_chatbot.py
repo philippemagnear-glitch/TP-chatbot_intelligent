@@ -1,11 +1,14 @@
 """Tests du chatbot minimal avec recherches et modèles simulés, sans réseau."""
 
 import json
+from copy import deepcopy
+
 import sys
 from pathlib import Path
 from unittest.mock import Mock
 
 import httpx
+import numpy as np
 import pytest
 from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -25,44 +28,55 @@ def make_reference(uid):
 
 
 @pytest.fixture(autouse=True)
-def block_real_models(monkeypatch):
+def block_real_models(monkeypatch, tmp_path):
     """Empêcher les tests d'initialiser les clients réels, y compris leur tokenizer."""
     monkeypatch.setattr(chatbot, "MistralAIEmbeddings", Mock(side_effect=AssertionError("Modèle réel interdit")))
     monkeypatch.setattr(chatbot, "ChatMistralAI", Mock(side_effect=AssertionError("Modèle réel interdit")))
     monkeypatch.setattr(chatbot, "load_dotenv", Mock())
+    monkeypatch.setattr(chatbot, "RAG_DIR", tmp_path)
 
 
 def test_search_events_deduplicates_uids_and_limits_distinct_events():
     """Conserver l'ordre des premiers UID et cinq fiches au maximum."""
     store = Mock()
-    store.similarity_search.return_value = [
-        Document(page_content="Passage", metadata={"uid": uid})
-        for uid in [9, 9, "9", 3, 7, 7, 5, 1, 2]
+    store.similarity_search_with_score.return_value = [
+        (Document(page_content="Passage", metadata={"uid": uid}), np.float32(distance))
+        for uid, distance in zip([9, 9, "9", 3, 7, 7, 5, 1, 2],
+                                 [0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1.0, 1.125])
     ]
-    store.docstore.search.side_effect = lambda key: make_reference(int(key.removeprefix("event_")))
+    references = {uid: make_reference(uid) for uid in [9, 3, 7, 5, 1, 2]}
+    before = {uid: deepcopy(reference.metadata) for uid, reference in references.items()}
+    store.docstore.search.side_effect = lambda key: references[int(key.removeprefix("event_"))]
 
     events = chatbot.search_events("  Un festival ?  ", store)
 
-    assert [event.metadata["uid"] for event in events] == [9, 3, 7, 5, 1]
-    store.similarity_search.assert_called_once_with("Un festival ?", k=20)
+    assert [reference.metadata["uid"] for reference, _, _ in events] == [9, 3, 7, 5, 1]
+    assert [rank for _, rank, _ in events] == [1, 2, 3, 4, 5]
+    assert [distance for _, _, distance in events] == [0.125, 0.5, 0.625, 0.875, 1.0]
+    assert all(reference is references[reference.metadata["uid"]] for reference, _, _ in events)
+    chatbot.build_context(events)
+    chatbot.build_markdown_context(events)
+    assert {uid: reference.metadata for uid, reference in references.items()} == before
+    store.similarity_search.assert_not_called()
+    store.similarity_search_with_score.assert_called_once_with("Un festival ?", k=20)
     assert [call.args[0] for call in store.docstore.search.call_args_list] == ["event_9", "event_3", "event_7", "event_5", "event_1"]
 
 
 def test_build_context_preserves_all_reference_metadata():
     """Garder l'intégralité des données, notamment timings, sans changer leurs types JSON."""
     reference = make_reference(12345)
-    context = json.loads(chatbot.build_context([reference]))
+    context = json.loads(chatbot.build_context([(reference, 1, 0.42)]))
 
-    assert context == [reference.metadata]
-    assert context[0]["event"]["timings"] == reference.metadata["event"]["timings"]
-    assert context[0]["event"]["extra"]["available"] is True
-    assert context[0]["event"]["online_access_link"] is None
+    assert context == [{"metadata": reference.metadata, "faiss_rank": 1, "faiss_distance": 0.42}]
+    assert context[0]["metadata"]["event"]["timings"] == reference.metadata["event"]["timings"]
+    assert context[0]["metadata"]["event"]["extra"]["available"] is True
+    assert context[0]["metadata"]["event"]["online_access_link"] is None
 
 
 def test_search_events_reports_missing_reference():
     """Signaler un ancien index sans fiche complète au lieu d'inventer l'événement."""
     store = Mock()
-    store.similarity_search.return_value = [Document(page_content="Jazz", metadata={"uid": 12345})]
+    store.similarity_search_with_score.return_value = [(Document(page_content="Jazz", metadata={"uid": 12345}), 0.42)]
     store.docstore.search.return_value = "ID event_12345 not found."
 
     with pytest.raises(ValueError, match="event_12345"):
@@ -72,7 +86,7 @@ def test_search_events_reports_missing_reference():
 def test_generate_answer_without_results_does_not_call_llm():
     """Ne pas payer une génération lorsqu'aucun chunk n'est retrouvé."""
     store, llm = Mock(), Mock()
-    store.similarity_search.return_value = []
+    store.similarity_search_with_score.return_value = []
 
     answer = chatbot.generate_answer("Du jazz ?", store, llm, "Consignes")
 
@@ -86,7 +100,7 @@ def test_generate_answer_sends_literal_prompt_and_full_context(monkeypatch):
     monkeypatch.setattr(chatbot, "USE_MARKDOWN_CONTEXT", False)
     store, llm = Mock(), Mock()
     reference = make_reference(12345)
-    store.similarity_search.return_value = [Document(page_content="Jazz", metadata={"uid": 12345})]
+    store.similarity_search_with_score.return_value = [(Document(page_content="Jazz", metadata={"uid": 12345}), 0.42)]
     store.docstore.search.return_value = reference
     llm.invoke.return_value = AIMessage(content="Voici le festival.")
     prompt = 'Instructions libres avec {"exemple": true}'
@@ -98,7 +112,7 @@ def test_generate_answer_sends_literal_prompt_and_full_context(monkeypatch):
     assert isinstance(messages[1], HumanMessage)
     assert "Du jazz ?" in messages[1].content
     payload = messages[1].content.split("Fiches d'événements (JSON) :\n", 1)[1]
-    assert json.loads(payload) == [reference.metadata]
+    assert json.loads(payload) == [{"metadata": reference.metadata, "faiss_rank": 1, "faiss_distance": 0.42}]
 
 
 def test_markdown_preserves_business_data_without_mutating_source():
@@ -112,27 +126,102 @@ def test_markdown_preserves_business_data_without_mutating_source():
             "html": "<iframe>TECHNIQUE</iframe>", "script": "SCRIPT_TECHNIQUE",
         }}],
     })
-    before = chatbot.build_context([reference])
-    context = chatbot.build_markdown_context([reference])
+    before = deepcopy(reference.metadata)
+    context = chatbot.build_markdown_context([(reference, 1, 0.42)])
     for text in ("Festival 12345", "UID 12345", "Concert\npour tous", "Âge minimum\n", "2026-11-10T20:00:00+01:00", "false", "Non renseigné", "https://example.org/a/b", "Programme", "Tout le programme"):
         assert text in context
     assert "\n0" in context
     assert "TECHNIQUE" not in context
-    assert chatbot.build_context([reference]) == before
+    assert reference.metadata == before
+    assert "Classement FAISS : 1\nDistance FAISS du meilleur chunk : 0.42" in context
 
 
 def test_generate_answer_uses_optional_markdown_context(monkeypatch):
     """Changer uniquement le contexte utilisateur, sans toucher au prompt système."""
     monkeypatch.setattr(chatbot, "USE_MARKDOWN_CONTEXT", True)
     reference = make_reference(12345)
-    monkeypatch.setattr(chatbot, "search_events", Mock(return_value=[reference]))
+    monkeypatch.setattr(chatbot, "search_events", Mock(return_value=[(reference, 1, 0.42)]))
     llm = Mock()
     llm.invoke.return_value = AIMessage(content="Réponse")
     chatbot.generate_answer("Du jazz ?", Mock(), llm, "Consignes inchangées")
     messages = llm.invoke.call_args.args[0]
     assert messages[0].content == "Consignes inchangées"
-    assert messages[1].content.endswith(chatbot.build_markdown_context([reference]))
+    assert messages[1].content.endswith(chatbot.build_markdown_context([(reference, 1, 0.42)]))
     assert "Fiches d'événements (Markdown)" in messages[1].content
+
+
+@pytest.mark.parametrize("markdown", [False, True])
+def test_generation_sends_full_selected_events_and_scores_without_export(monkeypatch, tmp_path, markdown):
+    """Vérifier les messages transmis au LLM simulé sans export sur disque."""
+    monkeypatch.setattr(chatbot, "USE_MARKDOWN_CONTEXT", markdown)
+    store, llm = Mock(), Mock()
+    references = {uid: make_reference(uid) for uid in range(1, 7)}
+    before = {uid: deepcopy(reference.metadata) for uid, reference in references.items()}
+    store.similarity_search_with_score.return_value = [
+        (Document(page_content="Chunk fictif", metadata={"uid": uid}), distance)
+        for uid, distance in [(1, 0.125), (1, 0.25), (2, 0.375), (3, 0.5), (4, 0.625), (5, 0.75), (6, 0.875)]
+    ]
+    store.docstore.search.side_effect = lambda key: references[int(key.removeprefix("event_"))]
+    llm.invoke.return_value = AIMessage(content="Réponse fictive")
+
+    chatbot.generate_answer("Du jazz ?", store, llm, "Prompt système fictif")
+
+    assert not (tmp_path / "debug_requests").exists()
+    messages = llm.invoke.call_args.args[0]
+    assert len(messages) == 2
+    assert isinstance(messages[0], SystemMessage)
+    assert isinstance(messages[1], HumanMessage)
+    assert "Question :\nDu jazz ?" in messages[1].content
+    context = messages[1].content.split(" :\n", 2)[2]
+    distances = [0.125, 0.375, 0.5, 0.625, 0.75]
+    if markdown:
+        assert context.count("## Festival ") == 5
+        assert "Festival 6" not in context
+        for uid, distance in enumerate(distances, 1):
+            assert f"## Festival {uid} — UID {uid}" in context
+            assert f"Classement FAISS : {uid}\nDistance FAISS du meilleur chunk : {distance}" in context
+        assert "2026-11-10T20:00:00+01:00" in context
+    else:
+        assert json.loads(context) == [
+            {"metadata": references[uid].metadata, "faiss_rank": uid, "faiss_distance": distance}
+            for uid, distance in enumerate(distances, 1)
+        ]
+    assert {uid: reference.metadata for uid, reference in references.items()} == before
+
+
+@pytest.mark.parametrize("url, data", [
+    ("https://youtu.be/abc", {}),
+    ("https://www.youtube.com/watch?v=abc", {}),
+    ("https://player.vimeo.com/video/123", {}),
+    ("https://example.org/video", {"type": "video"}),
+    ("https://example.org/page", {"url": "https://www.youtube.com/watch?v=abc"}),
+])
+def test_markdown_removes_video_descriptions_only(url, data):
+    """Retirer le bruit des clips sans toucher aux textes métier ni aux sources."""
+    reference = make_reference(12345)
+    reference.metadata["event"].update({
+        "long_description": "Présentation complète\navec informations pratiques.",
+        "event_links": [
+            {"link": url, "description": "PAROLES ET CREDITS",
+             "data": {**data, "title": "Vidéo de présentation", "description": "PAROLES ET CREDITS"}},
+            {"link": "https://example.org/programme", "data": {
+                "title": "Programme", "description": "Réservation obligatoire avant vendredi"}},
+            {"link": "mailto:contact@example.org"},
+        ],
+        "custom_field": {"important": False},
+    })
+    before = deepcopy(reference.metadata)
+
+    context = chatbot.build_markdown_context([(reference, 1, 0.42)])
+
+    assert "PAROLES ET CREDITS" not in context
+    for text in (url, "Vidéo de présentation", "Programme", "Réservation obligatoire avant vendredi",
+                 "mailto:contact@example.org", "Présentation complète\navec informations pratiques.",
+                 "### Présentation", "### Dates et horaires", "### Public et accessibilité",
+                 "### Conditions et liens utiles", "### Autres informations", "custom field", "false"):
+        assert text in context
+    assert reference.metadata == before
+    assert json.loads(chatbot.build_context([(reference, 1, 0.42)]))[0]["metadata"] == before
 
 
 def test_load_resources_reads_prompt_file_and_uses_local_index(monkeypatch, tmp_path):
@@ -172,7 +261,7 @@ def test_empty_question_does_not_trigger_search():
     store = Mock()
     with pytest.raises(ValueError, match="vide"):
         chatbot.search_events("   ", store)
-    store.similarity_search.assert_not_called()
+    store.similarity_search_with_score.assert_not_called()
 
 
 def test_terminal_handles_empty_question_and_context_error(monkeypatch, capsys):

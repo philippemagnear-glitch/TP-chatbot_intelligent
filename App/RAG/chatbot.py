@@ -8,8 +8,8 @@ en JSON brut ou en Markdown selon la configuration. L'exécution utilise l'API M
 import json
 import os
 import pickle
-from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlparse
 
 import faiss
 import httpx
@@ -64,16 +64,16 @@ def load_resources() -> tuple[FAISS, ChatMistralAI, str]:
 
 
 # ---------- Recherche et récupération des fiches ----------
-def search_events(question: str, store: FAISS) -> list[Document]:
+def search_events(question: str, store: FAISS) -> list[tuple[Document, int, float]]:
     """Retenir les cinq premiers événements distincts parmi les vingt chunks retrouvés."""
     if not isinstance(question, str) or not question.strip():
         raise ValueError("La question ne doit pas être vide.")
     # LangChain vectorise la question avec le modèle associé à l'index.
     # La similarité concerne les chunks ; les fiches complètes ne sont pas vectorisées.
-    chunks = store.similarity_search(question.strip(), k=SEARCH_K)
+    chunks = store.similarity_search_with_score(question.strip(), k=SEARCH_K)
     events = []
     seen = set()
-    for chunk in chunks:
+    for chunk, distance in chunks:
         uid = chunk.metadata.get("uid")
         if isinstance(uid, bool) or not isinstance(uid, (str, int)) or not str(uid).strip():
             raise ValueError("Un chunk retrouvé ne possède pas d'UID valide.")
@@ -87,24 +87,30 @@ def search_events(question: str, store: FAISS) -> list[Document]:
                 or str(reference.metadata["event"].get("uid")) != str(uid)):
             raise ValueError(f"Fiche complète absente ou incohérente : {event_id}. Reconstruire l'index.")
         seen.add(event_id)
-        events.append(reference)
+        # Distance brute du premier chunk rencontré : plus faible = plus proche.
+        # Le classement suit les événements distincts, sans modifier le DocStore.
+        events.append((reference, len(events) + 1, float(distance)))
         if len(events) == MAX_EVENTS:
             break
     return events
 
 
 # ---------- Présentation du contexte et génération ----------
-def build_context(events: list[Document]) -> str:
+def build_context(events: list[tuple[Document, int, float]]) -> str:
     """Sérialiser toutes les métadonnées des fiches, sans filtrer ni tronquer."""
-    return json.dumps([event.metadata for event in events], ensure_ascii=False, indent=2, allow_nan=False)
+    return json.dumps([
+        {"metadata": reference.metadata, "faiss_rank": rank, "faiss_distance": distance}
+        for reference, rank, distance in events
+    ], ensure_ascii=False, indent=2, allow_nan=False)
 
 
-def build_markdown_context(events: list[Document]) -> str:
+def build_markdown_context(events: list[tuple[Document, int, float]]) -> str:
     """Présenter les fiches en Markdown, sans modifier les événements du DocStore.
 
     Les données métier restent disponibles, sans la syntaxe JSON. Seules les
-    informations techniques des liens intégrés (iframe, script, miniature, etc.)
-    sont écartées ; leurs adresses, titres et descriptions sont conservés.
+    informations techniques des liens intégrés et les descriptions des vidéos
+    sont écartées ; leurs adresses et titres sont conservés. Les descriptions
+    des autres liens et les descriptions longues des événements restent intactes.
     """
     labels = {
         "description": "Description", "long_description": "Description longue",
@@ -113,6 +119,23 @@ def build_markdown_context(events: list[Document]) -> str:
         "public": "Public", "age_min": "Âge minimum", "age_max": "Âge maximum",
         "accessibility": "Accessibilité (valeurs déclarées, false = non confirmé)",
         "conditions": "Conditions", "access": "Accès", "event_links": "Liens",
+        "keywords": "Mots-clés", "event_types": "Types d'événement",
+        "postal_code": "Code postal", "city": "Ville", "district": "Quartier",
+        "metropole": "Métropole", "department": "Département", "region": "Région",
+        "latitude": "Latitude", "longitude": "Longitude", "billetterie": "Billetterie",
+        "online_access_link": "Accès en ligne", "location_website": "Site du lieu",
+        "slug": "Identifiant de page", "status": "Statut déclaré",
+        "origin_agenda": "Agenda source",
+    }
+    groups = {
+        "Présentation": ("description", "long_description", "keywords", "event_types"),
+        "Dates et horaires": ("timings", "date_range"),
+        "Lieu et accès": ("location_name", "address", "postal_code", "city", "district",
+                          "metropole", "department", "region", "latitude", "longitude", "access"),
+        "Public et accessibilité": ("public", "age_min", "age_max", "accessibility"),
+        "Conditions et liens utiles": ("conditions", "billetterie", "event_links",
+                                      "online_access_link", "location_website"),
+        "Source et statut": ("slug", "status", "origin_agenda"),
     }
 
     def render(value, depth=0):
@@ -131,61 +154,49 @@ def build_markdown_context(events: list[Document]) -> str:
         return "\n".join(indent + line for line in text.splitlines())
 
     sheets = []
-    for reference in events:
+    for reference, rank, distance in events:
         event = reference.metadata["event"]
-        lines = [f"## {event.get('title', 'Sans titre')} — UID {event['uid']}"]
+        lines = [
+            f"## {event.get('title', 'Sans titre')} — UID {event['uid']}",
+            f"Classement FAISS : {rank}\nDistance FAISS du meilleur chunk : {distance}",
+        ]
+        sections = {}
         for key, value in event.items():
             if key in ("uid", "title"):
                 continue
             if key == "event_links" and isinstance(value, list):
-                # Ne filtrer que les détails d'intégration, jamais les autres champs.
+                # Les descriptions de vidéos peuvent contenir paroles et crédits.
+                # Conserver les descriptions des autres liens (programme, réservation…).
                 links = []
                 for link in value:
                     if not isinstance(link, dict):
                         links.append(link)
                         continue
-                    useful = {name: link[name] for name in ("link", "title", "description", "url") if name in link}
-                    if isinstance(link.get("data"), dict):
-                        useful["data"] = {name: link["data"][name] for name in ("title", "description", "url") if name in link["data"]}
+                    data = link.get("data") if isinstance(link.get("data"), dict) else {}
+                    video = data.get("type") == "video" or link.get("type") == "video"
+                    for url in (link.get("link"), link.get("url"), data.get("url")):
+                        host = urlparse(url).hostname if isinstance(url, str) else None
+                        if host and any(host == domain or host.endswith("." + domain)
+                                        for domain in ("youtube.com", "youtu.be", "youtube-nocookie.com", "vimeo.com")):
+                            video = True
+                    fields = ("link", "title", "url") if video else ("link", "title", "description", "url")
+                    useful = {name: link[name] for name in fields if name in link}
+                    if data:
+                        useful["data"] = {name: data[name] for name in fields if name in data}
                     links.append(useful)
                 value = links
-            lines.append(f"### {labels.get(key, key.replace('_', ' '))}\n{render(value)}")
+            group = next((name for name, keys in groups.items() if key in keys), "Autres informations")
+            sections.setdefault(group, []).append(
+                f"#### {labels.get(key, key.replace('_', ' '))}\n{render(value)}"
+            )
+        for group in (*groups, "Autres informations"):
+            if group in sections:
+                lines.append(f"### {group}\n\n" + "\n\n".join(sections[group]))
         sheets.append("\n\n".join(lines))
     return "\n\n---\n\n".join(sheets)
 
 
-# ---------- Export temporaire pour observer les requêtes ----------
-def export_mistral_request(messages: list[SystemMessage | HumanMessage]) -> None:
-    """Exporter les messages de génération, sans clé API ni en-têtes réseau.
-
-    Cet export montre les entrées fournies à LangChain, pas la requête HTTP
-    complète produite par la bibliothèque. Les retours à la ligne sont échappés
-    en JSON : ils restent de vrais sauts de ligne dans le contenu des messages.
-    Pour retirer ce diagnostic, supprimer cette fonction et son appel avant invoke().
-    """
-    payload = {
-        "model": CHAT_MODEL,
-        "temperature": 0,
-        "messages": [
-            {"role": "system" if isinstance(message, SystemMessage) else "user",
-             "content": message.content}
-            for message in messages
-        ],
-    }
-    try:
-        directory = RAG_DIR / "debug_requests"
-        directory.mkdir(exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        path = directory / f"mistral_request_{timestamp}.json"
-        # Le mode x protège les exports précédents contre tout écrasement.
-        with path.open("x", encoding="utf-8") as file:
-            json.dump(payload, file, ensure_ascii=False, indent=2, allow_nan=False)
-            file.write("\n")
-        print(f"Requête Mistral exportée : {path}")
-    except OSError as error:
-        print(f"Export de diagnostic impossible : {error}. La génération continue.")
-
-
+# ---------- Generation ----------
 def generate_answer(question: str, store: FAISS, llm: ChatMistralAI, prompt: str) -> str:
     """Envoyer une question indépendante et les fiches dans le format choisi."""
     events = search_events(question, store)
@@ -199,7 +210,6 @@ def generate_answer(question: str, store: FAISS, llm: ChatMistralAI, prompt: str
         SystemMessage(content=prompt),
         HumanMessage(content=f"Question :\n{question.strip()}\n\nFiches d'événements ({context_format}) :\n{context}"),
     ]
-    export_mistral_request(messages)
     response = llm.invoke(messages)
     if not isinstance(response.content, str) or not response.content.strip():
         raise ValueError("Le modèle n'a pas renvoyé de réponse textuelle exploitable.")

@@ -1,5 +1,7 @@
 # ---------- Environnement Python ----------
 .venv/
+.uv-cache/
+.python/
 venv/
 env/
 
@@ -21,6 +23,10 @@ __pycache__/
 
 # ---------- Tests et couverture ----------
 .pytest_cache/
+pytest-cache-files-*/
+pytest-tmp/
+pytest-validation/
+pytest-of-*/
 .coverage
 htmlcov/
 
