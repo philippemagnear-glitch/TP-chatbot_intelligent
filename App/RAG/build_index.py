@@ -18,8 +18,9 @@ from langchain_core.embeddings import Embeddings
 
 # ---------- Configuration ----------
 RAG_DIR = Path(__file__).resolve().parent
-CACHE_PATH = RAG_DIR / "embeddings.jsonl"
-INDEX_DIR = RAG_DIR / "vector_store"
+DATA_DIR = RAG_DIR.parent / "Data"
+CACHE_PATH = DATA_DIR / "embeddings" / "embeddings.jsonl"
+INDEX_DIR = DATA_DIR / "vector_store"
 PROCESSED_DIR = RAG_DIR.parent / "Data" / "processed"
 MODEL = "mistral-embed"
 VECTOR_DIMENSION = 1024
@@ -159,7 +160,9 @@ def main() -> None:
     # temporaire sur le même système de fichiers, puis déplacés ensemble.
     # Une erreur normale nettoie le temporaire et laisse l'ancien index intact.
     # Le futur chargement du pickle doit se limiter à un index local de confiance.
-    with tempfile.TemporaryDirectory(prefix=".faiss_", dir=RAG_DIR) as temporary:
+    # Garder aussi les fichiers temporaires dans Data, sur le même disque que l'index.
+    INDEX_DIR.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=".faiss_", dir=INDEX_DIR.parent) as temporary:
         ready = Path(temporary) / "vector_store"
         store.save_local(str(ready))
         # LangChain utilise un même préfixe pour ses deux fichiers. Les renommer

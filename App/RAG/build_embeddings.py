@@ -25,7 +25,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PROCESSED_DIR = PROJECT_ROOT / "App" / "Data" / "processed"
 RAG_DIR = PROJECT_ROOT / "App" / "RAG"
-CACHE_PATH = RAG_DIR / "embeddings.jsonl"
+CACHE_PATH = PROJECT_ROOT / "App" / "Data" / "embeddings" / "embeddings.jsonl"
 
 MODEL = "mistral-embed"
 BATCH_SIZE = 32
@@ -283,6 +283,7 @@ def prepare_cache(chunks: list[Document]) -> int:
 # ---------- Génération par lots ----------
 def generate_embeddings(chunks: list[Document]) -> None:
     """Reprendre au premier chunk non sauvegardé, sans recalculer les lots valides."""
+    CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
     count = prepare_cache(chunks)
     print(f"Chunks récupérés : {count}/{len(chunks)}")
     if count == len(chunks):

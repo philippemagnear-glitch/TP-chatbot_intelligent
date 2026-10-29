@@ -23,7 +23,7 @@ from langchain_mistralai import ChatMistralAI, MistralAIEmbeddings
 # ---------- Configuration ----------
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 RAG_DIR = Path(__file__).resolve().parent
-INDEX_DIR = RAG_DIR / "vector_store"
+INDEX_DIR = PROJECT_ROOT / "App" / "Data" / "vector_store"
 PROMPT_PATH = RAG_DIR / "prompt.md"
 EMBEDDING_MODEL = "mistral-embed"
 CHAT_MODEL = "ministral-8b-2512"

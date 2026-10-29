@@ -1,4 +1,4 @@
-# ---------- Environnement Python ----------
+# ---------- Environnements Python ----------
 .venv/
 .uv-cache/
 .python/
@@ -34,30 +34,22 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-# ---------- Index FAISS généré ----------
-App/Faiss_index/
-
 # ---------- Données générées ----------
-App/Data/*.csv
-App/Data/*.json
-App/Data/*.parquet
-
-# ---------- Logs ----------
-*.log
-
-# Instructions locales de Codex (non versionnées)
-AGENTS.md
-**/AGENTS.md
+/App/Data/
+App/Faiss_index/
 
 # ---------- Embeddings et index vectoriels ----------
 *.jsonl
 *.faiss
 *.pkl
+App/RAG/vector_store/
 
 # ---------- Datasets OpenAgenda ----------
 openagenda_*.json
-# ---------- Données RAG générées ----------
-App/RAG/embeddings.jsonl
-App/RAG/vector_store/
-App/Data/raw/
-App/Data/processed/
+
+# ---------- Logs ----------
+*.log
+
+# ---------- Instructions locales de Codex ----------
+AGENTS.md
+**/AGENTS.md

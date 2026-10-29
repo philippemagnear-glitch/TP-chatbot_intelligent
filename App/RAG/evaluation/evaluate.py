@@ -22,7 +22,7 @@ from App.RAG import chatbot
 
 EVALUATION_DIR = Path(__file__).resolve().parent
 QUESTIONS_PATH = EVALUATION_DIR / "questions.json"
-RESULTS_DIR = EVALUATION_DIR / "results"
+RESULTS_DIR = chatbot.PROJECT_ROOT / "App" / "Data" / "evaluation"
 
 
 # ---------- Chargement du jeu de questions ----------
