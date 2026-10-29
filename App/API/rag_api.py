@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Charger une fois ; laisser /health et /rebuild accessibles si l'index manque."""
+    """Charger une fois ; exiger un RAG prêt si le démarrage Docker le demande."""
     try:
         app.state.resources = chatbot.load_resources()
     except (OSError, ValueError, RuntimeError, EOFError, pickle.UnpicklingError,
@@ -38,6 +38,8 @@ async def lifespan(app: FastAPI):
         # des informations sensibles. Le type aide à identifier l'étape en défaut.
         logger.error("Chargement initial des ressources RAG impossible (%s).",
                      type(error).__name__)
+        if os.getenv("RAG_REQUIRE_READY") == "1":
+            raise RuntimeError("Démarrage refusé : ressources RAG indisponibles.") from None
         app.state.resources = None
     try:
         yield

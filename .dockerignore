@@ -1,0 +1,34 @@
+# Secrets, environnement Windows et historique Git
+.env
+.env.*
+**/.env
+**/.env.*
+.venv/
+venv/
+.git/
+.codex/
+.agents/
+.vscode/
+.idea/
+
+# Données générées au démarrage dans le conteneur, jamais copiées dans l'image
+App/Data/
+
+# Caches, tests et rapports
+**/__pycache__/
+**/*.py[cod]
+.uv-cache/
+.cache/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage*
+htmlcov/
+tests/
+**/.ipynb_checkpoints/
+**/*.ipynb
+**/notebook/
+App/Evaluation/
+*.log
+
+# Le prompt App/RAG/prompt_system_chatbot.md reste inclus.
