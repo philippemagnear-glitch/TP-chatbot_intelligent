@@ -3,6 +3,7 @@
 import json
 import sys
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 from langchain_core.documents import Document
@@ -234,3 +235,59 @@ def test_main_refuses_to_overwrite_existing_directory():
     with pytest.raises(FileExistsError, match="Index déjà présent"):
         indexing.main()
     assert sentinel.read_text(encoding="utf-8") == "conserver"
+
+
+@pytest.mark.parametrize("problem", ["model", "batch", "text", "metadata", "vector-type", "overflow"])
+def test_load_embeddings_rejects_additional_corruptions(sample_data, problem):
+    documents, vectors = sample_data
+    record = make_record(documents, vectors)
+    item = record["chunks"][0]
+    if problem == "model":
+        record["model"] = "autre-modele"
+    elif problem == "batch":
+        record["chunks"] = []
+    elif problem == "text":
+        item["page_content"] = ""
+    elif problem == "metadata":
+        item["metadata"] = None
+    elif problem == "vector-type":
+        item["vector"][0] = True
+    else:
+        item["vector"][0] = 10 ** 400
+    original = json.dumps(record) + "\n"
+    indexing.CACHE_PATH.write_text(original, encoding="utf-8")
+    with pytest.raises(ValueError):
+        indexing.load_embeddings()
+    assert indexing.CACHE_PATH.read_text(encoding="utf-8") == original
+
+
+def test_load_event_documents_reports_missing_source():
+    with pytest.raises(FileNotFoundError):
+        indexing.load_event_documents()
+
+
+@pytest.mark.parametrize("problem", ["wrong-count", "incomplete-save", "destination-appeared"])
+def test_main_never_publishes_incomplete_or_conflicting_index(sample_data, sample_events, monkeypatch, problem):
+    documents, vectors = sample_data
+    indexing.CACHE_PATH.write_text(json.dumps(make_record(documents, vectors)) + "\n", encoding="utf-8")
+    store = Mock()
+    store.index.ntotal = 0 if problem == "wrong-count" else len(documents)
+
+    def fake_save(directory):
+        ready = Path(directory)
+        ready.mkdir()
+        (ready / "index.faiss").write_bytes(b"vecteurs fictifs")
+        if problem != "incomplete-save":
+            (ready / "index.pkl").write_bytes(b"documents fictifs")
+        if problem == "destination-appeared":
+            indexing.INDEX_DIR.mkdir()
+            (indexing.INDEX_DIR / "keep.txt").write_text("À conserver", encoding="utf-8")
+
+    store.save_local.side_effect = fake_save
+    monkeypatch.setattr(indexing.FAISS, "from_embeddings", Mock(return_value=store))
+    with pytest.raises((ValueError, OSError)):
+        indexing.main()
+    if problem == "destination-appeared":
+        assert (indexing.INDEX_DIR / "keep.txt").read_text(encoding="utf-8") == "À conserver"
+    else:
+        assert not indexing.INDEX_DIR.exists()

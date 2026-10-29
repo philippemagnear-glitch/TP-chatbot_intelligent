@@ -281,3 +281,73 @@ def test_terminal_handles_empty_question_and_context_error(monkeypatch, capsys):
     assert "taille du contexte complet" in output
     assert "Aucune donnée n'a été tronquée" in output
     generator.assert_called_once_with("Du jazz ?", store, llm, "Consignes")
+
+
+@pytest.mark.parametrize("problem", ["empty-prompt", "missing-directory", "missing-file", "missing-key", "empty-index", "wrong-dimension"])
+def test_load_resources_rejects_invalid_local_configuration(monkeypatch, tmp_path, problem):
+    """Vérifier les garde-fous avant de chercher ou générer une réponse."""
+    prompt = tmp_path / "prompt.md"
+    prompt.write_text(" " if problem == "empty-prompt" else "Consignes fictives", encoding="utf-8")
+    directory = tmp_path / "vector_store"
+    if problem != "missing-directory":
+        directory.mkdir()
+        (directory / "Vector_Store.faiss").write_bytes(b"index fictif")
+        if problem != "missing-file":
+            (directory / "DocStore_LangChain.pkl").write_bytes(b"pickle fictif jamais deserialise")
+    monkeypatch.setattr(chatbot, "PROMPT_PATH", prompt)
+    monkeypatch.setattr(chatbot, "INDEX_DIR", directory)
+    if problem == "missing-key":
+        monkeypatch.delenv("MISTRAL_API_KEY", raising=False)
+    else:
+        monkeypatch.setenv("MISTRAL_API_KEY", "cle-fictive")
+    reader = Mock()
+    monkeypatch.setattr(chatbot.faiss, "read_index", reader)
+    monkeypatch.setattr(chatbot.pickle, "load", Mock(return_value=(Mock(), {})))
+    if problem in ("empty-index", "wrong-dimension"):
+        store = Mock()
+        store.index.ntotal = 0 if problem == "empty-index" else 1
+        store.index.d = 512 if problem == "wrong-dimension" else 1024
+        monkeypatch.setattr(chatbot, "MistralAIEmbeddings", Mock(return_value=Mock()))
+        monkeypatch.setattr(chatbot, "FAISS", Mock(return_value=store))
+    with pytest.raises(ValueError):
+        chatbot.load_resources()
+    chatbot.ChatMistralAI.assert_not_called()
+    if problem not in ("empty-index", "wrong-dimension"):
+        chatbot.MistralAIEmbeddings.assert_not_called()
+        reader.assert_not_called()
+
+
+@pytest.mark.parametrize("error, expected", [
+    (httpx.ConnectError("Connexion simulée"), "Connexion à Mistral impossible"),
+    (ValueError("Réponse vide simulée"), "Réponse impossible"),
+])
+def test_terminal_reports_generation_errors_and_accepts_next_input(monkeypatch, capsys, error, expected):
+    monkeypatch.setattr(chatbot, "load_resources", Mock(return_value=(Mock(), Mock(), "Consignes")))
+    monkeypatch.setattr(chatbot, "generate_answer", Mock(side_effect=error))
+    answers = iter(["Du jazz ?", "exit"])
+    monkeypatch.setattr("builtins.input", lambda _: next(answers))
+    chatbot.main()
+    output = capsys.readouterr().out
+    assert expected in output
+    assert "Au revoir" in output
+
+
+@pytest.mark.parametrize("error", [FileNotFoundError("Index absent"), httpx.ConnectError("Erreur simulée")])
+def test_terminal_reports_initialization_error_without_asking_question(monkeypatch, capsys, error):
+    monkeypatch.setattr(chatbot, "load_resources", Mock(side_effect=error))
+    ask = Mock(side_effect=AssertionError("Le terminal ne doit pas demander de question"))
+    monkeypatch.setattr("builtins.input", ask)
+    chatbot.main()
+    assert "Initialisation impossible" in capsys.readouterr().out
+    ask.assert_not_called()
+
+
+def test_terminal_reports_mistral_quota_error(monkeypatch, capsys):
+    request = httpx.Request("POST", "https://example.invalid/chat")
+    error = httpx.HTTPStatusError("Quota simulé", request=request, response=httpx.Response(429, request=request))
+    monkeypatch.setattr(chatbot, "load_resources", Mock(return_value=(Mock(), Mock(), "Consignes")))
+    monkeypatch.setattr(chatbot, "generate_answer", Mock(side_effect=error))
+    questions = iter(["Du jazz ?", "exit"])
+    monkeypatch.setattr("builtins.input", lambda _: next(questions))
+    chatbot.main()
+    assert "HTTP 429" in capsys.readouterr().out

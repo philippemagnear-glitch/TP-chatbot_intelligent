@@ -1,134 +1,150 @@
-# Chatbot intelligent — événements à Toulouse
+# Chatbot RAG — événements à Toulouse
 
-Projet de formation OpenClassrooms **AI Engineer (RNCP niveau 7)** visant à
-construire un chatbot qui répond aux questions sur les événements à Toulouse,
-à partir des données OpenAgenda et d'un système RAG (*Retrieval-Augmented Generation*).
+Projet OpenClassrooms **IA Engineer, RNCP niveau 7** : répondre en français sur les événements de Toulouse à partir d'OpenAgenda.
 
-**État actuel :** collecte, prétraitement et exploration des données implémentés.
-Le chatbot et la recherche documentaire ne sont pas encore implémentés.
+## Fonctionnement et fonctionnalités
 
-## Fonctionnalités disponibles
+`OpenAgenda → JSON brut → prétraitement → chunks → embeddings Mistral → FAISS → réponse`
 
-- Collecte paginée des événements publiés à Toulouse depuis un an et à venir,
-  sans borne future, dans les agendas associés au jeu de lieux de Toulouse.
-- Sauvegarde d'un export JSON brut horodaté avec le schéma de l'agenda de
-  référence, les agendas sources et les métadonnées de collecte.
-- Prétraitement du dernier export brut : dédoublonnage par UID, exclusion des
-  UID invalides et extraction des informations utiles au futur chatbot.
-- Décodage des catégories et publics depuis le schéma OpenAgenda, des statuts
-  et de l'accessibilité ; conservation des valeurs inconnues.
-- Conservation des séances, lieux, descriptions françaises et liens dans un
-  nouveau JSON, avec provenance et compteurs de traitement. Le RAW reste intact.
-- Deux notebooks d'exploration des données brutes et prétraitées.
-- Tests unitaires du collecteur et du prétraitement, avec appels HTTP simulés
-  et fichiers temporaires pour isoler les données du projet.
+- Collecte paginée, dédoublonnage et structuration des événements ; données RAW préservées.
+- Quatre sections de chunking, taille maximale de 2 048 caractères, chevauchement de 150.
+- Embeddings `mistral-embed`, vecteurs de 1 024 valeurs, lots de 32 et reprise après interruption.
+- Recherche parmi 20 chunks, sélection de cinq événements distincts maximum et récupération des fiches complètes.
+- Génération avec `ministral-8b-2512`, contexte Markdown activé et prompt système dédié.
+- Chatbot en terminal, API REST locale, évaluation Ragas et tableau de bord HTML hors ligne.
 
-## Stack technique
-
-- **Python** : scripts de collecte et de transformation.
-- **Requests / python-dotenv** : accès à OpenAgenda et configuration de la clé API.
-- **pandas** : exploration des données dans les notebooks.
-- **Pytest / pytest-cov** : tests unitaires et outils de couverture.
-
-[requirements.txt](requirements.txt) contient les versions figées, ainsi que
-LangChain, FAISS, Sentence Transformers et Mistral AI pour la suite du projet.
-Ces bibliothèques RAG/LLM ne sont pas encore utilisées dans les scripts présents.
+Stack : Python, Requests, LangChain, Mistral, FAISS, FastAPI/Uvicorn, Ragas/LiteLLM et Pytest.
 
 ## Architecture
 
 ```text
 App/
-├── API/openagenda.py                  # Collecte depuis OpenAgenda
-├── Data/
-│   ├── raw/                           # Exports bruts conservés intacts
-│   └── processed/                     # Exports structurés et dédoublonnés
+├── API/
+│   ├── openagenda.py                 # Collecte OpenAgenda
+│   └── rag_api.py                    # Routes FastAPI
 ├── Preprocessing/
-│   ├── preprocess_openagenda.py       # Transformation du dernier RAW
-│   └── notebook/                      # Exploration RAW et processed
-├── RAG/                               # Emplacement prévu, sans implémentation
-└── Faiss_index/                       # Emplacement prévu pour l'index
-tests/                                # Tests unitaires
-requirements.txt                      # Dépendances Python
+│   ├── preprocess_openagenda.py      # Nettoyage et structuration
+│   └── notebook/                     # Exploration des données
+├── RAG/
+│   ├── build_embeddings.py           # Chunking, vectorisation et reprise
+│   ├── build_index.py                # Construction et reconstruction FAISS
+│   ├── chatbot.py                    # Recherche, génération et terminal
+│   ├── prompt_system_chatbot.md      # Instructions système
+│   └── notebook/                     # Conception et documentation pédagogique
+├── Evaluation/
+│   ├── question.json                # 12 questions annotées, versionnées
+│   ├── evaluate_rag.py               # Évaluation indépendante de FastAPI
+│   └── generate_report.py            # Tableau de bord local
+└── Data/                             # Données générées, ignorées par Git
+    ├── raw/                          # openagenda_*.json
+    ├── processed/                    # openagenda_processed_*.json
+    ├── embeddings/                   # embeddings.jsonl
+    ├── vector_store/                 # Vector_Store.faiss + DocStore_LangChain.pkl
+    ├── evaluation/                   # ragas_*.json + dashboard.html
+    └── resultats_tests_unitaires/     # Résumé HTML, logs, XML et couverture
+tests/                                # Tests unitaires, d'intégration et HTTP
+requirements.txt                      # Versions des dépendances
 ```
 
-Flux actuel : `OpenAgenda → JSON RAW → prétraitement → JSON processed`.
+## Installation et configuration
 
-## Installation
-
-Prérequis : **Python 3.13** (version de l'environnement local observé), **uv**
-et une clé API OpenAgenda pour effectuer une nouvelle collecte.
-La compatibilité avec d'autres versions de Python n'a pas été vérifiée.
-
+Prérequis : **Python 3.13**, **uv** et accès aux API OpenAgenda/Mistral. Les autres versions de Python n'ont pas été vérifiées.
 Depuis la racine du dépôt, dans PowerShell :
 
 ```powershell
-# Uniquement si aucun environnement .venv n'existe déjà
+# Créer l'environnement uniquement s'il n'existe pas déjà
 uv venv --python 3.13
+.\.venv\Scripts\Activate.ps1
 uv pip install --python .venv/Scripts/python.exe -r requirements.txt
 ```
 
-Créer un fichier `.env` à la racine et y renseigner sa propre clé :
+Créer `.env` à la racine, avec ses propres valeurs :
 
 ```dotenv
-OPENAGENDA_API_KEY=<votre_cle_openagenda>
+OPENAGENDA_API_KEY=<cle_pour_la_collecte>
+MISTRAL_API_KEY=<cle_pour_embeddings_chatbot_et_evaluation>
+RAG_ADMIN_TOKEN=<secret_administrateur_distinct_pour_rebuild>
 ```
 
-Le fichier `.env` est ignoré par Git. Une variable d'environnement déjà définie
-reste prioritaire. La clé n'est nécessaire que pour la collecte.
+`.env` n'est pas versionné. Les variables déjà définies dans l'environnement sont prioritaires.
+Sans `RAG_ADMIN_TOKEN`, la reconstruction HTTP reste désactivée. Ne jamais publier les secrets.
 
-Les commandes documentées correspondent aux fichiers et points d'entrée lus ;
-leur exécution et l'installation des dépendances n'ont pas été vérifiées.
+## Construire et utiliser le RAG
 
-## Utilisation
-
-Exécuter les commandes suivantes depuis la racine du dépôt.
-
-### 1. Collecter les événements
+Les données et index ne sont pas fournis par Git : les produire dans cet ordre.
+**La vectorisation, les questions au chatbot et l'évaluation consomment de l'usage Mistral.**
 
 ```powershell
-uv run --no-sync python App/API/openagenda.py
+uv run python App/API/openagenda.py
+uv run python App/Preprocessing/preprocess_openagenda.py
+uv run python App/RAG/build_embeddings.py
+uv run python App/RAG/build_index.py
+uv run python App/RAG/chatbot.py
 ```
 
-Cette commande appelle l'API OpenAgenda et écrit un nouvel export
-`App/Data/raw/openagenda_<horodatage>.json`. Les doublons sont conservés à ce stade.
-La ville et les identifiants OpenAgenda sont définis dans le script.
+Les scripts sélectionnent le dernier JSON approprié et créent leurs dossiers de sortie.
+Le JSONL conserve texte, métadonnées et vecteur ; les lots valides sont réutilisés à la reprise.
+Un cache incohérent avec les chunks actuels est refusé. Garder le JSON prétraité et les embeddings du même jeu de données.
+La construction FAISS n'appelle pas Mistral et refuse une destination déjà existante.
+Pour remplacer un index existant, utiliser `/rebuild` avec les embeddings correspondants. Quitter le terminal avec `exit` ou `quitter`.
 
-### 2. Prétraiter le dernier export
+En Python : `load_resources()` charge les ressources ; `generate_answer(question, store, llm, prompt)` renvoie la réponse sans lancer le terminal.
+
+## API REST locale
 
 ```powershell
-uv run --no-sync python App/Preprocessing/preprocess_openagenda.py
+uv run uvicorn App.API.rag_api:app --host 127.0.0.1 --port 8000 --workers 1
 ```
 
-Le RAW est choisi par date de modification, puis par nom en cas d'égalité.
-Il doit contenir `events` et `reference_agenda`. La première occurrence de chaque
-UID est conservée ; le résultat est enregistré dans
-`App/Data/processed/openagenda_processed_<horodatage>.json`.
+Documentation interactive : <http://127.0.0.1:8000/docs>.
 
-### 3. Explorer les données
-
-Ouvrir les notebooks avec un environnement Jupyter configuré séparément :
-
-- [Exploration RAW](App/Preprocessing/notebook/explore_openagenda.ipynb).
-- [Exploration processed](App/Preprocessing/notebook/explore_processed_openagenda.ipynb).
-
-Les données correspondantes doivent être présentes. Jupyter n'est pas déclaré
-dans `requirements.txt` ; aucun serveur notebook n'est fourni par le projet.
-
-### Tests unitaires
-
-Commande à lancer manuellement :
+| Route | Entrée et fonction |
+|---|---|
+| `GET /health` | Vérifie que le serveur HTTP répond, sans garantir que le RAG est prêt. |
+| `POST /ask` | JSON `{"question":"Quels concerts à Toulouse ?"}` → `{"answer":"…"}`. |
+| `POST /rebuild` | Aucun corps ; `Authorization: Bearer <RAG_ADMIN_TOKEN>`. Reconstruit FAISS sans recalculer les embeddings. |
 
 ```powershell
-uv run --no-sync python -m pytest tests/
+Invoke-RestMethod -Uri 'http://127.0.0.1:8000/ask' -Method Post -ContentType 'application/json; charset=utf-8' -Body '{"question":"Quels concerts à Toulouse ?"}'
 ```
 
-Les tests couvrent notamment la pagination, les erreurs API, le dédoublonnage,
-les transformations et les sauvegardes. Ils n'ont pas été exécutés pour cette documentation.
+Les ressources sont chargées au démarrage puis actualisées après reconstruction ; un échec de rechargement déclenche la restauration de l'ancien index.
+Erreurs principales : `422` requête invalide, `401` authentification refusée, `429` quota Mistral,
+`502` échec du RAG/service distant, `503` ressources indisponibles, `504` délai dépassé.
+**Usage prévu : un utilisateur, un worker et des appels successifs, sans verrou.**
+`/ask` n'est pas authentifié : ne pas exposer cette configuration telle quelle sur Internet.
 
-## Suite du développement
+## Tests et évaluation
 
-- Construire les documents et embeddings à partir des événements prétraités.
-- Mettre en place l'index FAISS et la recherche documentaire.
-- Intégrer la génération de réponses et le chatbot fondé sur le RAG.
+```powershell
+# Tous les tests techniques, résumé HTML, journal et couverture regroupés dans Data
+uv run python tests/run_tests.py
+# Évaluation réelle : Q01 à Q10 notées, Q11/Q12 examinées séparément pour la sécurité
+uv run python App/Evaluation/evaluate_rag.py
+# Premier essai limité à Q01 ; plusieurs appels Mistral restent nécessaires
+uv run python App/Evaluation/evaluate_rag.py --limit 1
+# Régénérer le HTML depuis les rapports existants, sans appel API
+uv run python App/Evaluation/generate_report.py
+```
 
-Aucune interface de conversation ni commande de lancement du chatbot n'est disponible à ce stade.
+Les tests couvrent collecte, nettoyage, chunking, vecteurs, reprise, FAISS, génération et routes HTTP (`tests/test_rag_api.py`).
+Le script d'évaluation Ragas n'a pas de test automatisé dédié. Les services externes sont simulés dans la suite technique.
+Ouvrir `App/Data/resultats_tests_unitaires/rapport_tests.html` pour les résultats et le lien vers la couverture.
+Ce dossier contient aussi `execution.log`, `resultats.xml`, `.coverage`, `couverture.xml`, `couverture/` et les temporaires Pytest.
+Chaque lancement remplace les rapports précédents et renvoie un code non nul en cas d'échec. Aucun workflow GitHub Actions n'est fourni.
+Couverture : collecte, prétraitement, RAG et API, hors `App/Evaluation/`. Le prochain lancement recalculera le pourcentage sur ce périmètre.
+
+Ragas calcule **Faithfulness, Answer Relevancy et Factual Correctness F1** ; Python calcule
+le **Recall@5 des événements**. `--judge-model` permet de choisir un autre modèle Mistral évaluateur.
+Les rapports conservent les scores, erreurs, contextes, modèles, versions et empreinte du prompt,
+sans enregistrer systématiquement le prompt complet. Une erreur technique produit un code de sortie non nul.
+Les valeurs non calculées restent distinctes de zéro ; les moyennes indiquent leur effectif.
+Le tableau de bord est régénéré après sauvegarde du rapport final : ouvrir `App/Data/evaluation/dashboard.html` sans serveur ni connexion Internet.
+
+## Limites à prendre en compte
+
+Douze questions constituent un petit jeu d'évaluation. Les jugements Ragas nécessitent une
+lecture critique, notamment pour les refus justifiés et les références courtes ; un score F1
+n'est pas un taux de réponses correctes. Q11/Q12 demandent une vérification humaine.
+La qualité dépend des données OpenAgenda et des événements retrouvés. Les quotas Mistral peuvent interrompre les requêtes ou les métriques.
+Charger uniquement les fichiers FAISS/pickle produits localement et considérés comme fiables.

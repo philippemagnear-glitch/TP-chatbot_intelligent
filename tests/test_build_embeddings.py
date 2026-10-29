@@ -1,6 +1,7 @@
 """Tests du chunking et du cache, avec données fictives et sans appel Mistral."""
 
 import json
+import os
 import sys
 from pathlib import Path
 from unittest.mock import Mock
@@ -27,6 +28,9 @@ def make_event(uid=12345):
 def isolated_cache(monkeypatch, tmp_path):
     """Isoler le cache et bloquer le modèle réel, même en cas d'appel accidentel."""
     monkeypatch.setattr(embeddings, "CACHE_PATH", tmp_path / "embeddings.jsonl")
+    processed = tmp_path / "processed"
+    processed.mkdir()
+    monkeypatch.setattr(embeddings, "PROCESSED_DIR", processed)
     monkeypatch.setattr(embeddings, "load_dotenv", Mock())
     monkeypatch.setattr(
         embeddings, "MistralAIEmbeddings",
@@ -203,3 +207,121 @@ def test_generate_embeddings_resumes_without_recomputing_saved_batch(monkeypatch
     constructor.reset_mock()
     embeddings.generate_embeddings(chunks)
     constructor.assert_not_called()
+
+
+# ---------- Chargement et orchestration ----------
+def test_load_events_selects_latest_preprocessed_file():
+    """Choisir par date de modification plutôt que par nom uniquement."""
+    old = embeddings.PROCESSED_DIR / "openagenda_processed_z.json"
+    latest = embeddings.PROCESSED_DIR / "openagenda_processed_a.json"
+    for path, uid in ((old, 1), (latest, 2)):
+        path.write_text(json.dumps({"events": [make_event(uid)]}), encoding="utf-8")
+    os.utime(old, (1000, 1000))
+    os.utime(latest, (2000, 2000))
+    source, events = embeddings.load_events()
+    assert source == latest
+    assert events == [make_event(2)]
+
+
+def test_load_events_reports_missing_file():
+    with pytest.raises(FileNotFoundError):
+        embeddings.load_events()
+
+
+@pytest.mark.parametrize("problem", [
+    "json", "root", "empty-events", "invalid-event", "boolean-uid",
+    "missing-uid", "blank-uid", "duplicate-uid", "empty-title", "description-type",
+])
+def test_load_events_rejects_invalid_source(problem):
+    event = make_event()
+    payload = {"events": [event]}
+    if problem == "root":
+        payload = []
+    elif problem == "empty-events":
+        payload["events"] = []
+    elif problem == "invalid-event":
+        payload["events"] = [None]
+    elif problem == "boolean-uid":
+        event["uid"] = True
+    elif problem == "missing-uid":
+        event.pop("uid")
+    elif problem == "blank-uid":
+        event["uid"] = " "
+    elif problem == "duplicate-uid":
+        payload["events"].append(dict(event))
+    elif problem == "empty-title":
+        event["title"] = " "
+    elif problem == "description-type":
+        event["long_description"] = ["Texte"]
+    path = embeddings.PROCESSED_DIR / "openagenda_processed_test.json"
+    path.write_text("{" if problem == "json" else json.dumps(payload), encoding="utf-8")
+    before = path.read_bytes()
+    with pytest.raises(ValueError):
+        embeddings.load_events()
+    assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize("description", [None, ""])
+def test_load_events_accepts_optional_long_description(description):
+    event = make_event()
+    event["long_description"] = description
+    path = embeddings.PROCESSED_DIR / "openagenda_processed_test.json"
+    path.write_text(json.dumps({"events": [event]}), encoding="utf-8")
+    assert embeddings.load_events()[1] == [event]
+
+
+def test_main_builds_complete_jsonl_with_simulated_embeddings(monkeypatch):
+    event = make_event()
+    source = embeddings.PROCESSED_DIR / "openagenda_processed_test.json"
+    source.write_text(json.dumps({"events": [event]}), encoding="utf-8")
+    chunks = embeddings.build_chunks(event)
+    vectors = [[0.5] * 1024 for _ in chunks]
+    model = Mock()
+    model.embed_documents.return_value = vectors
+    monkeypatch.setenv("MISTRAL_API_KEY", "cle-fictive")
+    monkeypatch.setattr(embeddings, "MistralAIEmbeddings", Mock(return_value=model))
+    embeddings.main()
+    model.embed_documents.assert_called_once_with([chunk.page_content for chunk in chunks])
+    assert embeddings.prepare_cache(chunks) == len(chunks)
+    record = json.loads(embeddings.CACHE_PATH.read_text(encoding="utf-8"))
+    assert record == embeddings.make_record(chunks, vectors, len(chunks))
+
+
+def test_generate_embeddings_rejects_missing_key_before_model_creation(monkeypatch):
+    monkeypatch.delenv("MISTRAL_API_KEY", raising=False)
+    with pytest.raises(ValueError, match="MISTRAL_API_KEY"):
+        embeddings.generate_embeddings(embeddings.build_chunks(make_event()))
+    embeddings.MistralAIEmbeddings.assert_not_called()
+    assert not embeddings.CACHE_PATH.exists()
+
+
+@pytest.mark.parametrize("suffix, repair", [(b'{"texte":"\xc3', True), (b'\xff\n', False), (b'{broken\n', False)])
+def test_cache_repairs_only_truncated_tail_and_preserves_valid_batch(suffix, repair):
+    chunks = embeddings.build_chunks(make_event())
+    record = embeddings.make_record(chunks, [[0.0] * 1024 for _ in chunks], len(chunks))
+    valid = (json.dumps(record) + "\n").encode("utf-8")
+    embeddings.CACHE_PATH.write_bytes(valid + suffix)
+    if repair:
+        assert embeddings.prepare_cache(chunks) == len(chunks)
+        assert embeddings.CACHE_PATH.read_bytes() == valid
+    else:
+        with pytest.raises(ValueError):
+            embeddings.prepare_cache(chunks)
+        assert embeddings.CACHE_PATH.read_bytes() == valid + suffix
+
+
+@pytest.mark.parametrize("problem", ["model", "total", "batch"])
+def test_cache_rejects_invalid_batch_without_rewriting_it(problem):
+    chunks = embeddings.build_chunks(make_event())
+    record = embeddings.make_record(chunks, [[0.0] * 1024 for _ in chunks], len(chunks))
+    if problem == "model":
+        record["model"] = "autre-modele"
+    elif problem == "total":
+        record["total_chunks"] += 1
+    else:
+        record["chunks"].pop()
+    original = (json.dumps(record) + "\n").encode("utf-8")
+    embeddings.CACHE_PATH.write_bytes(original)
+    with pytest.raises(ValueError):
+        embeddings.prepare_cache(chunks)
+    assert embeddings.CACHE_PATH.read_bytes() == original

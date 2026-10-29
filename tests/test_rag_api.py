@@ -1,6 +1,7 @@
 """Tests fonctionnels HTTP avec RAG simulé, sans serveur ni appel Mistral.
 
-Depuis la racine : uv run pytest tests/api_test.py -v
+Depuis la racine : uv run python tests/run_tests.py
+Pour cibler uniquement ce fichier : uv run pytest tests/test_rag_api.py -v
 FastAPI doit être disponible dans l'environnement du projet.
 Les seules écritures des tests de reconstruction se font dans tmp_path.
 """
