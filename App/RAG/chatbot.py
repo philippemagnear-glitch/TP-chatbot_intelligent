@@ -199,9 +199,19 @@ def build_markdown_context(events: list[tuple[Document, int, float]]) -> str:
 # ---------- Generation ----------
 def generate_answer(question: str, store: FAISS, llm: ChatMistralAI, prompt: str) -> str:
     """Envoyer une question indépendante et les fiches dans le format choisi."""
+    return generate_answer_with_details(question, store, llm, prompt)["answer"]
+
+
+def generate_answer_with_details(question: str, store: FAISS, llm: ChatMistralAI, prompt: str) -> dict:
+    """Exposer la réponse et ses sources pour l'évaluation, avec une seule recherche.
+
+    Le contexte retourné est exactement le texte documentaire envoyé au modèle,
+    après notre mise en forme. Les références humaines ne participent jamais au RAG.
+    """
     events = search_events(question, store)
     if not events:
-        return "Aucun événement n'a été retrouvé pour cette question."
+        return {"answer": "Aucun événement n'a été retrouvé pour cette question.",
+                "context": "", "retrieved_uids": []}
     context = build_markdown_context(events) if USE_MARKDOWN_CONTEXT else build_context(events)
     context_format = "Markdown" if USE_MARKDOWN_CONTEXT else "JSON"
     # Le prompt est un texte libre, pas un template : les accolades sont acceptées.
@@ -213,7 +223,8 @@ def generate_answer(question: str, store: FAISS, llm: ChatMistralAI, prompt: str
     response = llm.invoke(messages)
     if not isinstance(response.content, str) or not response.content.strip():
         raise ValueError("Le modèle n'a pas renvoyé de réponse textuelle exploitable.")
-    return response.content
+    return {"answer": response.content, "context": context,
+            "retrieved_uids": [reference.metadata["uid"] for reference, _, _ in events]}
 
 
 # ---------- Boucle du terminal ----------
