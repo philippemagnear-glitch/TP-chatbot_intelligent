@@ -26,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from App.RAG import chatbot
 
 
-QUESTIONS_PATH = chatbot.RAG_DIR / "evaluation" / "questions.json"
+QUESTIONS_PATH = Path(__file__).resolve().parent / "question.json"
 RESULTS_DIR = chatbot.PROJECT_ROOT / "App" / "Data" / "evaluation"
 METRIC_NAMES = ("recall_at_5", "faithfulness", "answer_relevancy", "factual_correctness")
 
