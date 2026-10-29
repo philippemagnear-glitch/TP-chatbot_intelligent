@@ -71,7 +71,7 @@ def evaluate(version: str) -> Path:
             file.write(f"ERREUR D'INITIALISATION : {type(error).__name__}\n")
             file.flush()
             raise
-        # load_resources() lit prompt.md : conserver ce Markdown tel qu'il est
+        # load_resources() lit prompt_system_chatbot.md : conserver ce Markdown tel qu'il est
         # transmis au message système, sans relire ni convertir le fichier.
         file.write(f"PROMPT UTILISÉ :\n{prompt}\n\n---\n\n")
         file.flush()

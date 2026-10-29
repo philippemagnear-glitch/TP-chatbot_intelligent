@@ -24,7 +24,7 @@ from langchain_mistralai import ChatMistralAI, MistralAIEmbeddings
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 RAG_DIR = Path(__file__).resolve().parent
 INDEX_DIR = PROJECT_ROOT / "App" / "Data" / "vector_store"
-PROMPT_PATH = RAG_DIR / "prompt.md"
+PROMPT_PATH = RAG_DIR / "prompt_system_chatbot.md"
 EMBEDDING_MODEL = "mistral-embed"
 CHAT_MODEL = "ministral-8b-2512"
 SEARCH_K = 20
@@ -37,7 +37,7 @@ def load_resources() -> tuple[FAISS, ChatMistralAI, str]:
     """Charger le prompt Markdown, les modèles Mistral et notre index local de confiance."""
     prompt = PROMPT_PATH.read_text(encoding="utf-8").strip()
     if not prompt:
-        raise ValueError("Le fichier prompt.md est vide.")
+        raise ValueError("Le fichier prompt_system_chatbot.md est vide.")
     if INDEX_DIR.is_symlink() or not INDEX_DIR.is_dir():
         raise ValueError(f"Dossier d'index local introuvable ou incorrect : {INDEX_DIR}")
     for name in ("Vector_Store.faiss", "DocStore_LangChain.pkl"):

@@ -7,8 +7,11 @@ Ce script ne lit pas .env et n'appelle aucune API.
 
 import json
 import math
+import shutil
 import sys
 import tempfile
+import warnings
+from contextlib import contextmanager
 from pathlib import Path
 
 from langchain_community.vectorstores import FAISS
@@ -129,10 +132,12 @@ def load_event_documents() -> dict[str, Document]:
 # LangChain associe les vecteurs FAISS aux documents et aux métadonnées pour
 # restituer les événements lors des futures recherches. Tout l'index reste en RAM
 # jusqu'à la sauvegarde finale, effectuée une seule fois.
-def main() -> None:
+def main(destination: Path | None = None) -> None:
     """Construire un index complet sans remplacer une destination existante."""
-    if INDEX_DIR.exists() or INDEX_DIR.is_symlink():
-        raise FileExistsError(f"Index déjà présent : {INDEX_DIR}")
+    # L'API peut préparer un index séparé ; le lancement terminal reste inchangé.
+    index_dir = INDEX_DIR if destination is None else Path(destination)
+    if index_dir.exists() or index_dir.is_symlink():
+        raise FileExistsError(f"Index déjà présent : {index_dir}")
     documents, vectors = load_embeddings()
     ids = [document.metadata["chunk_id"] for document in documents]
     references = load_event_documents()
@@ -161,8 +166,8 @@ def main() -> None:
     # Une erreur normale nettoie le temporaire et laisse l'ancien index intact.
     # Le futur chargement du pickle doit se limiter à un index local de confiance.
     # Garder aussi les fichiers temporaires dans Data, sur le même disque que l'index.
-    INDEX_DIR.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix=".faiss_", dir=INDEX_DIR.parent) as temporary:
+    index_dir.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=".faiss_", dir=index_dir.parent) as temporary:
         ready = Path(temporary) / "vector_store"
         store.save_local(str(ready))
         # LangChain utilise un même préfixe pour ses deux fichiers. Les renommer
@@ -171,11 +176,50 @@ def main() -> None:
         (ready / "index.pkl").rename(ready / "DocStore_LangChain.pkl")
         if not all((ready / name).is_file() for name in ("Vector_Store.faiss", "DocStore_LangChain.pkl")):
             raise OSError("Sauvegarde FAISS incomplète.")
-        if INDEX_DIR.exists() or INDEX_DIR.is_symlink():
-            raise FileExistsError(f"Destination apparue pendant la construction : {INDEX_DIR}")
-        ready.rename(INDEX_DIR)
+        if index_dir.exists() or index_dir.is_symlink():
+            raise FileExistsError(f"Destination apparue pendant la construction : {index_dir}")
+        ready.rename(index_dir)
     print(f"Index terminé : {len(documents)} chunks | {len(references)} événements "
-          f"| {store.index.ntotal} vecteurs | {INDEX_DIR}")
+          f"| {store.index.ntotal} vecteurs | {index_dir}")
+
+
+@contextmanager
+def rebuild_index(destination: Path | None = None):
+    """Préparer puis remplacer l'index ; restaurer l'ancien si le rechargement échoue.
+
+    Utiliser ``with rebuild_index():`` et recharger les ressources dans ce bloc.
+    La sortie normale confirme le nouvel index. Une exception dans le bloc
+    restaure l'ancien dossier. Réservé aux appels successifs du TP local.
+    """
+    target = INDEX_DIR if destination is None else Path(destination)
+    backup = target.with_name(".vector_store_previous")
+    if target.is_symlink() or (target.exists() and not target.is_dir()):
+        raise ValueError("Destination d'index incorrecte.")
+    if backup.exists() or backup.is_symlink():
+        raise ValueError("Une sauvegarde précédente doit être vérifiée manuellement.")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=".rebuild_", dir=target.parent) as temporary:
+        ready = Path(temporary) / "ready"
+        main(destination=ready)
+        if target.exists():
+            target.rename(backup)
+        try:
+            ready.rename(target)
+            yield
+        except BaseException:
+            # Protéger aussi l'ancien index lors d'une interruption. La sauvegarde
+            # reste hors du temporaire si sa restauration devait elle-même échouer.
+            if target.exists():
+                target.rename(Path(temporary) / "rejected")
+            if backup.exists():
+                backup.rename(target)
+            raise
+        if backup.exists():
+            try:
+                shutil.rmtree(backup)
+            except OSError:
+                # L'index est déjà validé : un échec de nettoyage ne l'invalide pas.
+                warnings.warn("Index reconstruit ; sauvegarde précédente conservée.", stacklevel=2)
 
 
 if __name__ == "__main__":
