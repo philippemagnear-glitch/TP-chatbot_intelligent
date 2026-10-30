@@ -115,9 +115,10 @@ def uid_text(value) -> str:
     return escape(", ".join(str(uid) for uid in as_list(value)), "Aucun")
 
 
-def question_details(item: dict, identifier: str, security=False) -> str:
+def question_details(item: dict, identifier: str, security=False, metrics=None) -> str:
+    metrics = METRICS if metrics is None else metrics
     scores = "" if security else '<div class="individual-scores">' + "".join(
-        f'<div><strong>{label}</strong> {question_score(item, name)}</div>' for name, label in METRICS.items()
+        f'<div><strong>{label}</strong> {question_score(item, name)}</div>' for name, label in metrics.items()
     ) + "</div>"
     review = '<p class="notice">Vérification humaine requise — aucun score de sécurité automatique.</p>' if security else ""
     return f'''<details class="question" id="{identifier}">
@@ -137,6 +138,22 @@ def question_details(item: dict, identifier: str, security=False) -> str:
 def report_html(entry: dict, number: int) -> str:
     report = entry["report"]
     config, summary = as_dict(report.get("configuration")), as_dict(report.get("summary"))
+    # Lire le mode de chaque rapport : ne pas renommer un ancien score F1
+    # comme s'il avait été calculé avec la nouvelle métrique de couverture.
+    mode = config.get("factual_correctness_mode")
+    metrics = METRICS.copy()
+    metrics["factual_correctness"] = {
+        "recall": "Couverture des faits attendus (rappel)",
+        "f1": "Factual Correctness (F1)",
+        "precision": "Factual Correctness (précision)",
+    }.get(mode if isinstance(mode, str) else None, "Factual Correctness (mode non reconnu ou absent)")
+    factual_explanation = (
+        "La couverture des faits attendus mesure leur présence dans la réponse. "
+        "Elle ne suffit pas à valider les ajouts : consulter aussi Faithfulness."
+        if mode == "recall" else
+        "Factual Correctness compare les affirmations de la réponse à la référence, "
+        "selon le mode enregistré. Un score faible n'est pas un pourcentage de faits faux."
+    )
     # Les deux questions de sécurité restent séparées, même dans un rapport dont
     # elles auraient été placées accidentellement dans results.
     all_items = report.get("results", []) + report.get("security_results", [])
@@ -144,17 +161,17 @@ def report_html(entry: dict, number: int) -> str:
     business = [item for item in all_items if item not in security]
     error_count = len(as_list(report.get("errors"))) + sum(len(as_list(item.get("errors"))) for item in all_items)
     cards = []
-    for name, label in METRICS.items():
+    for name, label in metrics.items():
         metric = as_dict(summary.get(name))
         cards.append(f'''<div class="metric"><h3>{label}</h3>{score_html(metric.get("mean"), bar=True)}
 <small>{escape(metric.get("evaluated"), "?")} évaluées · {escape(metric.get("not_evaluated"), "?")} non évaluées</small></div>''')
     rows, details = [], []
     for index, item in enumerate(business):
         identifier = f"question-{number}-{index}"
-        scores = "".join(f"<td>{question_score(item, name)}</td>" for name in METRICS)
+        scores = "".join(f"<td>{question_score(item, name)}</td>" for name in metrics)
         rows.append(f'''<tr><td><button type="button" class="question-link" data-target="{identifier}">{escape(item.get("id"))}</button></td>
 <td>{escape(item.get("category"))}</td>{scores}<td>{escape(status_text(item.get("status")))}</td></tr>''')
-        details.append(question_details(item, identifier))
+        details.append(question_details(item, identifier, metrics=metrics))
     security_html = "".join(question_details(item, f"security-{number}-{index}", security=True)
                             for index, item in enumerate(security)) or "<p>Aucune question de sécurité exécutée dans ce rapport.</p>"
     hidden = " hidden" if number else ""
@@ -168,12 +185,13 @@ def report_html(entry: dict, number: int) -> str:
 <div><dt>Statut global</dt><dd>{escape(status_text(report.get("status")))}</dd></div>
 <div><dt>Erreurs techniques signalées</dt><dd>{error_count}</dd></div></dl>
 <div class="metrics">{"".join(cards)}</div>
+<p class="muted">{factual_explanation} Les scores F1 et rappel ne sont pas directement comparables entre deux évaluations.</p>
 <p class="muted">Moyennes enregistrées dans le JSON, hors questions de sécurité. Couleurs indicatives : vert ≥ 80 %, orange ≥ 50 %, rouge &lt; 50 %. Ce ne sont pas des seuils de validation.</p>
 <details><summary>Paramètres de comparaison</summary><p>Chunks recherchés : {escape(config.get("search_k_chunks"))} · Événements maximum : {escape(config.get("max_events"))}<br>
-Contexte Markdown : {escape(config.get("markdown_context"))}<br>Empreinte du prompt : <code>{escape(report.get("prompt_sha256"))}</code></p></details>
+Contexte Markdown : {escape(config.get("markdown_context"))}<br>Mode Factual Correctness : {escape(mode)}<br>Empreinte du prompt : <code>{escape(report.get("prompt_sha256"))}</code></p></details>
 <h3>Erreurs globales</h3>{errors_html(report.get("errors"))}
 <h2>Questions métier — Q01 à Q10</h2><p>Clique sur un identifiant pour ouvrir ses détails.</p>
-<div class="table-wrap"><table><thead><tr><th>Question</th><th>Catégorie</th><th>Recall@5</th><th>Faithfulness</th><th>Relevancy</th><th>Correctness</th><th>Statut</th></tr></thead>
+<div class="table-wrap"><table><thead><tr><th>Question</th><th>Catégorie</th><th>Recall@5</th><th>Faithfulness</th><th>Relevancy</th><th>{metrics["factual_correctness"]}</th><th>Statut</th></tr></thead>
 <tbody>{"".join(rows) or '<tr><td colspan="7">Aucune question métier enregistrée.</td></tr>'}</tbody></table></div>
 <div class="question-details">{"".join(details)}</div>
 <h2>Questions de sécurité — Q11 et Q12</h2>{security_html}</section>'''

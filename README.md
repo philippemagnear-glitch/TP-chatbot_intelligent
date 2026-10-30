@@ -122,15 +122,53 @@ L'image utilise Python 3.13 Debian slim, uv et un utilisateur non privilégié. 
 
 ### Lancer depuis Docker Desktop
 
-Dans **Images**, sélectionner `openagenda-rag`, puis **Run** et les paramètres facultatifs :
+Dans **Images**, sélectionner `openagenda-rag`, puis ouvrir **Run** et les paramètres facultatifs (**Optional settings**). Renseigner les réglages suivants **avant de confirmer le lancement** :
 
 1. Donner le nom `openagenda-rag` au conteneur.
 2. Associer le port hôte `8000` au port conteneur `8000`.
-3. Renseigner les trois variables de configuration ci-dessus.
+3. Dans **Environment variables**, ajouter les trois variables du tableau ci-dessous, en respectant exactement leurs noms.
 4. Ne configurer **aucun volume ni montage Windows**.
-5. Lancer et suivre l'onglet des logs pendant l'initialisation.
+5. Cliquer sur **Run**, puis ouvrir le conteneur dans **Containers** et suivre son onglet **Logs**.
 
-Si l'interface ne permet pas de limiter la publication à `127.0.0.1`, utiliser la commande suivante pour garantir un accès limité à l'ordinateur local. Arrêter d'abord tout autre serveur occupant le port 8000.
+| Variable à ajouter | Valeur à renseigner avant Run |
+|---|---|
+| `OPENAGENDA_API_KEY` | Votre propre clé OpenAgenda ; l'évaluateur utilise sa clé. |
+| `MISTRAL_API_KEY` | Votre propre clé Mistral ; l'évaluateur utilise sa clé. |
+| `RAG_ADMIN_TOKEN` | Choisir un token secret personnel et le renseigner dans les variables d'environnement du conteneur. |
+
+Choisir un token suffisamment long et difficile à deviner, distinct des clés API. Renseigner sa valeur dans **Environment variables → RAG_ADMIN_TOKEN** avant de lancer le conteneur. Dans Swagger UI, cliquer sur **Authorize**, saisir **exactement le même token**, sans ajouter le préfixe `Bearer`, puis confirmer avec **Authorize**. Swagger transmettra automatiquement l'en-tête `Authorization: Bearer <token>` lors des requêtes protégées, notamment `/rebuild`. Ne pas publier ce secret.
+
+`/rebuild` reconstruit FAISS depuis les embeddings existants, sans recalculer les embeddings ni lancer de génération Mistral.
+
+Au premier lancement, **aucun script n'est à exécuter manuellement dans le conteneur**. Le démarrage prépare l'application dans cet ordre :
+
+```text
+Run → collecte OpenAgenda → prétraitement → chunks et embeddings Mistral
+    → index FAISS et DocStore → chargement du RAG → serveur FastAPI prêt
+```
+
+Les dossiers et fichiers sont créés dans `/app/App/Data/`, à l'intérieur du conteneur. Attendre dans les logs le message Uvicorn **`Application startup complete.`** avant d'interroger l'API. Un conteneur indiqué comme démarré ne signifie pas que la préparation est terminée. Ne pas lancer en parallèle un autre serveur FastAPI sur l'ordinateur : le conteneur fournit déjà le serveur HTTP.
+
+### Poser une question depuis Swagger
+
+Une fois le démarrage terminé, laisser le conteneur actif et ouvrir <http://127.0.0.1:8000/docs> dans le navigateur de l'ordinateur. Swagger permet d'appeler directement l'API qui fonctionne dans le conteneur :
+
+1. Ouvrir **GET /health**, cliquer sur **Try it out**, puis **Execute** pour vérifier que le serveur répond.
+2. Ouvrir **POST /ask**, puis cliquer sur **Try it out**.
+3. Remplacer le corps de la requête par une question, par exemple :
+
+   ```json
+   {"question": "Quels concerts sont proposés à Toulouse ce week-end pour un enfant de six ans ?"}
+   ```
+
+4. Cliquer sur **Execute** et lire la réponse dans **Response body**, sous la clé `answer`.
+5. Modifier la question et exécuter à nouveau pour poursuivre les essais ; chaque question est indépendante.
+
+Chaque appel à `/ask` peut consommer de l'usage Mistral. Il n'est pas nécessaire d'appeler `/rebuild` avant de poser une question : l'index initial a déjà été préparé automatiquement. Cette route sert uniquement à reconstruire FAISS depuis les embeddings conservés et exige le token administrateur.
+
+Le parcours de premier démarrage, de préparation des données et de questions via Swagger a été **validé manuellement par le porteur du projet**. Cette vérification est distincte des tests automatisés.
+
+Si l'interface Docker Desktop ne permet pas de limiter la publication à `127.0.0.1`, utiliser la commande suivante pour garantir un accès limité à l'ordinateur local. Arrêter d'abord tout autre serveur occupant le port 8000. Cette commande est une alternative à **Run**, pas une étape supplémentaire à effectuer après avoir créé le conteneur dans Docker Desktop.
 
 ### Alternative PowerShell
 
@@ -156,6 +194,10 @@ docker logs --follow openagenda-rag
 L'index est validé lors du chargement par FastAPI. En mode Docker, un échec empêche le démarrage de l'API. Les logs donnent l'étape et les compteurs ; les erreurs API brutes sont masquées pour protéger les informations sensibles.
 
 ### Arrêter et reprendre
+
+Dans Docker Desktop, ouvrir **Containers** et utiliser **Stop** sur `openagenda-rag`. Pour reprendre, utiliser **Start** sur **ce même conteneur**, attendre la fin du chargement dans les logs, puis rouvrir Swagger. Ne pas créer un nouveau conteneur avec **Run** à chaque utilisation.
+
+Les commandes équivalentes dans PowerShell sont :
 
 ```powershell
 docker stop openagenda-rag
@@ -237,7 +279,7 @@ $body = @{ question = 'Quels concerts à Toulouse ?' } | ConvertTo-Json
 Invoke-RestMethod -Uri 'http://127.0.0.1:8000/ask' -Method Post -ContentType 'application/json; charset=utf-8' -Body ([System.Text.Encoding]::UTF8.GetBytes($body))
 ```
 
-Dans Swagger, utiliser **Authorize** pour renseigner le token administrateur avant `/rebuild`. Les champs supplémentaires et les questions vides sont refusés par Pydantic. Les réponses HTTP n'exposent pas les erreurs distantes brutes.
+Dans Swagger, cliquer sur **Authorize** et renseigner le même token que celui défini dans `RAG_ADMIN_TOKEN` pour le conteneur, sans le préfixe `Bearer`. Swagger l'envoie ensuite automatiquement lors des requêtes protégées comme `/rebuild`. Les champs supplémentaires et les questions vides sont refusés par Pydantic. Les réponses HTTP n'exposent pas les erreurs distantes brutes.
 
 Erreurs principales : `401` authentification administrateur refusée ; `422` requête invalide ; `429` quota Mistral ; `502` échec de génération/service distant ; `504` délai dépassé ; `503` ressources indisponibles, reconstruction échouée ou administration non configurée.
 
@@ -308,4 +350,4 @@ Les rapports JSON horodatés et `dashboard.html` sont enregistrés dans `App/Dat
 - La qualité dépend des données disponibles et de la sélection sémantique. Aucun filtre déterministe de date ou d'âge n'est garanti par la recherche actuelle ; contrôler les propositions importantes.
 - Douze questions constituent un petit jeu d'évaluation. Les scores Ragas nécessitent une lecture critique ; un score F1 n'est pas un taux de réponses correctes.
 
-Les commandes sont fournies pour une exécution manuelle. Aucun résultat chiffré de couverture ou d'évaluation n'est garanti par ce README. La version actuelle de l'orchestration Docker reste à valider par une construction et un lancement complet autorisé.
+Les commandes sont fournies pour une exécution manuelle. Aucun résultat chiffré de couverture ou d'évaluation n'est garanti par ce README. La validation manuelle Docker rapportée plus haut ne constitue pas un test automatisé de l'ensemble des scénarios de panne ou de reprise.

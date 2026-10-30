@@ -29,6 +29,7 @@ from App.RAG import chatbot
 QUESTIONS_PATH = Path(__file__).resolve().parent / "question.json"
 RESULTS_DIR = chatbot.PROJECT_ROOT / "App" / "Data" / "evaluation"
 METRIC_NAMES = ("recall_at_5", "faithfulness", "answer_relevancy", "factual_correctness")
+FACTUAL_CORRECTNESS_MODE = "recall"
 
 
 # ---------- Validation avant tout appel payant ----------
@@ -91,7 +92,9 @@ def build_metrics(judge_model: str) -> dict:
     return {
         "faithfulness": Faithfulness(llm=llm),
         "answer_relevancy": AnswerRelevancy(llm=llm, embeddings=embeddings, strictness=3),
-        "factual_correctness": FactualCorrectness(llm=llm, mode="f1"),
+        # Mesurer la présence des faits de référence dans la réponse. Faithfulness
+        # reste nécessaire pour vérifier les ajouts par rapport au contexte.
+        "factual_correctness": FactualCorrectness(llm=llm, mode=FACTUAL_CORRECTNESS_MODE),
     }
 
 
@@ -220,7 +223,8 @@ def main() -> int:
             "chat_model": chatbot.CHAT_MODEL, "judge_model": args.judge_model,
             "embedding_model": chatbot.EMBEDDING_MODEL, "search_k_chunks": chatbot.SEARCH_K,
             "max_events": chatbot.MAX_EVENTS, "markdown_context": chatbot.USE_MARKDOWN_CONTEXT,
-            "temperature": 0, "answer_relevancy_strictness": 3, "factual_correctness_mode": "f1",
+            "temperature": 0, "answer_relevancy_strictness": 3,
+            "factual_correctness_mode": FACTUAL_CORRECTNESS_MODE,
         },
         "results": [], "security_results": [], "summary": {}, "errors": [],
     }

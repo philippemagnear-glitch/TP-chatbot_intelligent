@@ -4,10 +4,12 @@
 
 <table>
 <tr><th>ENTRÉE</th><th>TRANSFORMATION</th><th>SORTIE</th></tr>
-<tr><td>JSON prétraité<br><code>App/Data/processed/</code></td><td>Événements → chunks thématiques → embeddings</td><td><code>App/RAG/embeddings.jsonl</code><br>Texte + métadonnées + vecteur</td></tr>
+<tr><td>JSON prétraité<br><code>App/Data/processed/</code></td><td>Événements → chunks thématiques → embeddings</td><td><code>App/Data/embeddings/embeddings.jsonl</code><br>Texte + métadonnées + vecteur</td></tr>
 </table>
 
-**Fil conducteur :** l’événement fictif **Festival de jazz**, UID **12345**. Les contenus sont abrégés. Dans l’exemple, sa description longue nécessite deux fragments.
+**Fil conducteur :** l’événement fictif **Festival de jazz**, UID **12345**. Les contenus sont abrégés. Dans l’exemple, les trois premières sections tiennent chacune dans un chunk et la description longue nécessite deux fragments. D’autres événements peuvent produire davantage de fragments dans n’importe quelle section.
+
+Les chemins sont calculés depuis le fichier [build_embeddings.py](../build_embeddings.py), indépendamment du dossier de lancement. Les données prétraitées sont uniquement lues ; le résultat est enregistré sous `App/Data/embeddings/`.
 
 ## 1. Qui pilote le script ?
 
@@ -22,7 +24,7 @@
 flowchart TD
     A["main()"] --> B["load_events()<br/>Fichier source + événements validés"]
     B --> C["build_chunks(event)<br/>Appelée pour chaque événement"]
-    C --> D["Rassembler tous les chunks<br/>Vérifier les identifiants uniques<br/>Signaler les dépassements de taille"]
+    C --> D["Rassembler tous les chunks<br/>Vérifier les identifiants uniques<br/>Compter les éventuels dépassements de taille"]
     D --> E["generate_embeddings(chunks)<br/>Vérifier la reprise, vectoriser, sauvegarder"]
     E --> F["Afficher le bilan<br/>Nombre de chunks + chemin de sortie"]
 ```
@@ -54,7 +56,7 @@ long_description : "Programme détaillé des concerts…"</pre></td><td><strong>
 
 <table>
 <tr><th>ENTRÉE</th><th>TRAITEMENT</th><th>SORTIE</th></tr>
-<tr><td>Un dictionnaire :<br>Festival de jazz, UID 12345</td><td>Regrouper les champs par thème.<br>Créer le texte de chaque section.<br>Ajouter les identifiants et les liens.</td><td>Une liste de <code>Document</code> LangChain</td></tr>
+<tr><td>Un dictionnaire :<br>Festival de jazz, UID 12345</td><td>Regrouper les champs par thème.<br>Découper chaque section seulement si nécessaire.<br>Ajouter l’en-tête, les identifiants et les liens.</td><td>Une liste de <code>Document</code> LangChain<br>Chaque <code>page_content</code> ≤ 2 048 caractères</td></tr>
 </table>
 
 <table>
@@ -66,15 +68,27 @@ long_description : "Programme détaillé des concerts…"</pre></td><td><strong>
 
 <table>
 <tr><th>RÈGLE</th><th>CONSÉQUENCE</th></tr>
-<tr><td>Trois premières sections</td><td>Toujours créées et conservées entières, même au-delà de 2 048 caractères.</td></tr>
+<tr><td>Trois premières sections</td><td>Toujours créées. Chacune reste entière si son texte et son en-tête tiennent dans 2 048 caractères ; sinon, elle est découpée.</td></tr>
 <tr><td>Description longue vide, nulle ou absente</td><td>Aucun chunk de description ; les trois autres sections restent présentes.</td></tr>
-<tr><td>Description qui tient dans l’espace disponible</td><td>Un seul chunk de description, sans découpage.</td></tr>
-<tr><td>Description trop longue</td><td>Découpage par caractères. La référence de 2 048 caractères réserve la place du titre et du numéro de partie.</td></tr>
-<tr><td>Chevauchement de 150 caractères</td><td>La fin d’un fragment est reprise au début du suivant pour limiter la perte de contexte.</td></tr>
+<tr><td>N’importe quelle section qui tient dans l’espace disponible</td><td>Un seul chunk, sans découpage. L’en-tête contient le titre de l’événement et le nom du thème.</td></tr>
+<tr><td>N’importe quelle section trop longue</td><td><code>RecursiveCharacterTextSplitter</code> essaie les paragraphes, les lignes, les espaces, puis les caractères. La taille disponible réserve la place du titre, du thème et de la numérotation.</td></tr>
+<tr><td>Chevauchement visé de 150 caractères</td><td>Conserver du contexte entre fragments. Le chevauchement réel peut être inférieur selon les séparateurs naturels ; il ne concerne pas deux thèmes différents.</td></tr>
 <tr><td>Champ supplémentaire dans l’événement</td><td>Ajout aux informations pratiques, sauf <code>long_description</code> et <code>timings</code>.</td></tr>
 </table>
 
-**Attention :** 2 048 caractères ne signifie pas 2 048 tokens. Un dépassement des sections entières est signalé, sans être corrigé automatiquement. Un titre ne laissant pas assez de place ou une description dépassant 99 999 fragments provoque une erreur.
+**Attention :** 2 048 caractères ne signifie pas 2 048 tokens. `build_chunks()` vérifie la taille finale de chaque `page_content`, en-tête compris, et refuse tout dépassement. Un en-tête laissant au plus 150 caractères pour le découpage ou une section dépassant 99 999 fragments provoque également une erreur. Le compteur supplémentaire dans `main()` ne remplace pas ce contrôle bloquant.
+
+```mermaid
+flowchart LR
+    A["Une section thématique<br/>Présentation, pratique, public ou description"] --> B{"Texte + en-tête<br/>≤ 2 048 caractères ?"}
+    B -->|Oui| C["Conserver la section entière<br/>Un Document"]
+    B -->|Non| D["Réserver la place de l’en-tête numéroté<br/>Découper avec les séparateurs naturels"]
+    D --> E["Plusieurs Documents<br/>part, total_parts et liens entre voisins"]
+    C --> F["Vérifier chaque page_content final<br/>Refuser tout dépassement"]
+    E --> F
+```
+
+Les séparateurs sont conservés et `strip_whitespace=False` évite de retirer les espaces aux bords des fragments. Les champs des trois premières sections sont présentés sous la forme `champ : valeur`, avec des valeurs sérialisées en JSON ; la description longue est utilisée comme texte directement. Le découpage ne constitue pas un nouveau nettoyage des données.
 
 ## 4. Comprendre l’objet transporté : un `Document`
 
@@ -93,12 +107,14 @@ section : "Présentation"</pre></td></tr>
 </table>
 
 <table>
-<tr><th>POUR UNE DESCRIPTION FRAGMENTÉE, EN PLUS</th><th>EXEMPLE DU CHUNK <code>12345_4</code></th></tr>
+<tr><th>POUR TOUTE SECTION FRAGMENTÉE, EN PLUS</th><th>EXEMPLE DU CHUNK <code>12345_4</code></th></tr>
 <tr><td>Numéro et nombre de parties</td><td><code>part : 1</code> · <code>total_parts : 2</code></td></tr>
 <tr><td>Liens entre fragments</td><td><code>previous_chunk_id : null</code> · <code>next_chunk_id : "12345_5"</code></td></tr>
 </table>
 
 Les horaires complets et les autres informations de l’événement restent dans la source prétraitée. `timings` n’est recopié ni dans le texte vectorisé ni dans les métadonnées minimales.
+
+`chunk_index` progresse sur l’ensemble de l’événement, même quand plusieurs thèmes sont découpés : `12345_1`, `12345_2`, etc. En revanche, `part` et `total_parts` numérotent les fragments d’une même section. Les liens `previous_chunk_id` et `next_chunk_id` restent dans cette section ; ils valent `null` lorsqu’il n’existe pas de voisin. L’en-tête d’un fragment indique par exemple `Section : Description longue - partie 1/2`.
 
 ## 5. Reprendre avant de payer — `prepare_cache(chunks)`
 
@@ -146,6 +162,8 @@ flowchart TD
 
 Le lot de 32 est un compromis entre un appel par texte et une requête trop volumineuse. Il ne garantit pas le respect de toutes les limites de l’API. Tous les chunks restent en mémoire, mais les vecteurs sont traités lot par lot.
 
+Si le cache contient déjà tous les chunks valides, la fonction termine avant de créer le client Mistral. Sinon, elle charge `.env` sans remplacer les variables d’environnement existantes et exige `MISTRAL_API_KEY`. Aucun appel n’est effectué pour les lots sauvegardés et validés. La sauvegarde utilise l’UTF-8, conserve les accents et refuse les nombres JSON non finis.
+
 ## 7. Contrôler, assembler, sauvegarder
 
 <table>
@@ -172,7 +190,7 @@ Dans cet exemple à cinq chunks, tout tient dans une ligne. Sur le traitement co
 
 <table>
 <tr><th>CHOIX</th><th>AVANTAGE</th><th>POINT D’ATTENTION</th></tr>
-<tr><td>Chunks thématiques</td><td>Passages centrés sur un sujet, avec le titre comme contexte.</td><td>Leur taille peut varier ; trois sections ne sont pas découpées.</td></tr>
+<tr><td>Chunks thématiques</td><td>Passages centrés sur un sujet, avec le titre comme contexte et une limite vérifiée pour toutes les sections.</td><td>Un thème long produit plusieurs fragments ; davantage de chunks signifie davantage de textes à vectoriser.</td></tr>
 <tr><td>Métadonnées minimales</td><td>Évite la répétition des informations complètes dans chaque chunk.</td><td>L’UID doit permettre de retrouver l’événement dans la source.</td></tr>
 <tr><td>Sauvegarde par lot</td><td>Réutilise les embeddings déjà enregistrés après un arrêt.</td><td>Un lot reçu mais non sauvegardé doit être recalculé.</td></tr>
 <tr><td>Comparaison directe au redémarrage</td><td>Refuse les chunks sauvegardés dont le texte ou les métadonnées ont changé.</td><td>Pas d’empreinte globale ; les chunks non encore sauvegardés ne sont pas comparés à une ancienne version.</td></tr>
